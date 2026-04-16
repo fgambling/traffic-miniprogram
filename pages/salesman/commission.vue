@@ -1,6 +1,7 @@
 <template>
   <view class="page">
     <view class="page-header">
+      <view :style="{ height: statusBarHeight + 'px' }" />
       <view class="header-title">💰 佣金明细</view>
     </view>
 
@@ -38,8 +39,7 @@
         :amount="record.amount"
         :amount-color="record.amountColor"
       />
-
-      <view style="height: 140rpx;" />
+      <view class="tab-spacer" />
     </scroll-view>
 
     <TabBar role="salesman" :current="2" />
@@ -86,6 +86,7 @@ import { ref } from 'vue'
 import TabBar from '../../components/TabBar.vue'
 import FollowCard from '../../components/FollowCard.vue'
 import BottomSheet from '../../components/BottomSheet.vue'
+import { statusBarHeight } from '../../utils/system.js'
 
 const showWithdrawSheet = ref(false)
 const withdrawMethod = ref('wechat')
@@ -141,7 +142,7 @@ function submitWithdraw() {
 .page-header {
   background: linear-gradient(135deg, #162d50, #1f4788);
   color: #fff;
-  padding: 80rpx 32rpx 36rpx;
+  padding: 20rpx 32rpx 36rpx;
   flex-shrink: 0;
 
   .header-title {

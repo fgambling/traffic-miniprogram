@@ -1,6 +1,7 @@
 <template>
   <view class="page">
     <view class="page-header">
+      <view :style="{ height: statusBarHeight + 'px' }" />
       <view class="header-title">💡 AI经营建议</view>
       <view class="header-sub">基于客流画像 + 商家数据智能生成</view>
     </view>
@@ -31,8 +32,7 @@
         <view class="ac-desc">{{ advice.desc }}</view>
         <view class="ac-time">🕐 {{ advice.time }}</view>
       </view>
-
-      <view style="height: 160rpx;" />
+      <view class="tab-spacer" />
     </scroll-view>
 
     <!-- FAB 生成按钮 -->
@@ -82,6 +82,7 @@
 import { ref, computed } from 'vue'
 import TabBar from '../../components/TabBar.vue'
 import BottomSheet from '../../components/BottomSheet.vue'
+import { statusBarHeight } from '../../utils/system.js'
 
 const filterTabs = ['全部', '备货', '排班', '营销']
 const activeFilter = ref(0)
@@ -165,7 +166,7 @@ function generateAdvice() {
 .page-header {
   background: linear-gradient(135deg, #162d50, #1f4788);
   color: #fff;
-  padding: 80rpx 32rpx 36rpx;
+  padding: 20rpx 32rpx 36rpx;
   flex-shrink: 0;
 
   .header-title {

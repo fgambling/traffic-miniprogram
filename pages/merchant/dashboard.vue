@@ -2,6 +2,7 @@
   <view class="page">
     <!-- ===== Header ===== -->
     <view class="hero-header">
+      <view :style="{ height: statusBarHeight + 'px' }" />
       <view class="top-bar">
         <view class="store-name">
           <text class="store-icon">🏪</text>
@@ -115,8 +116,7 @@
           </view>
         </view>
       </view>
-
-      <view style="height: 140rpx;" />
+      <view class="tab-spacer" />
     </scroll-view>
 
     <!-- Tab Bar -->
@@ -149,6 +149,7 @@ import { ref, computed } from 'vue'
 import TabBar from '../../components/TabBar.vue'
 import BottomSheet from '../../components/BottomSheet.vue'
 import UniChart from '../../components/UniChart.vue'
+import { statusBarHeight } from '../../utils/system.js'
 
 // ---- Mock 数据 ----
 const stat = ref({
@@ -206,7 +207,7 @@ function goAI() { uni.redirectTo({ url: '/pages/merchant/ai-advice' }) }
 .hero-header {
   background: linear-gradient(135deg, #162d50, #1f4788);
   color: #fff;
-  padding: 80rpx 40rpx 32rpx;
+  padding: 20rpx 40rpx 32rpx;
   flex-shrink: 0;
 
   .top-bar {

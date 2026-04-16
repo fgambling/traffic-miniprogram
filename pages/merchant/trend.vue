@@ -1,6 +1,7 @@
 <template>
   <view class="page">
     <view class="page-header">
+      <view :style="{ height: statusBarHeight + 'px' }" />
       <view class="header-title">📊 客流趋势</view>
     </view>
 
@@ -64,8 +65,7 @@
         <text class="lock-text">升级高级版查看历史同期对比</text>
         <view class="lock-btn">立即升级</view>
       </view>
-
-      <view style="height: 140rpx;" />
+      <view class="tab-spacer" />
     </scroll-view>
 
     <TabBar role="merchant" :current="1" />
@@ -84,6 +84,7 @@ import { ref } from 'vue'
 import TabBar from '../../components/TabBar.vue'
 import BottomSheet from '../../components/BottomSheet.vue'
 import UniChart from '../../components/UniChart.vue'
+import { statusBarHeight } from '../../utils/system.js'
 
 const tabs = ['小时', '日', '周', '月']
 const activeTab = ref(0)
@@ -104,7 +105,7 @@ const chartLabels = ['8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '
 .page-header {
   background: linear-gradient(135deg, #162d50, #1f4788);
   color: #fff;
-  padding: 80rpx 32rpx 36rpx;
+  padding: 20rpx 32rpx 36rpx;
   flex-shrink: 0;
 
   .header-title {

@@ -27,8 +27,24 @@ page {
   font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', sans-serif;
 }
 
-* {
-  box-sizing: border-box;
+/* TabBar 底部安全占位（scroll-view 不识别 padding-bottom，必须用真实子元素） */
+.tab-spacer {
+  height: calc(124rpx + env(safe-area-inset-bottom));
+  flex-shrink: 0;
+}
+
+/* WeChat miniprogram button reset */
+button {
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  border: none;
+  font-size: inherit;
+  color: inherit;
+  line-height: inherit;
+}
+button::after {
+  display: none;
 }
 
 .page-scroll {

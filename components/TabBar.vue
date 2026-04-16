@@ -7,7 +7,10 @@
       :class="{ active: current === i }"
       @click="onTab(tab, i)"
     >
-      <text class="tab-icon">{{ tab.icon }}</text>
+      <view class="active-dot" v-if="current === i" />
+      <view class="icon-wrap" :class="{ 'icon-wrap--active': current === i }">
+        <text class="tab-icon">{{ tab.icon }}</text>
+      </view>
       <text class="tab-label">{{ tab.label }}</text>
     </view>
   </view>
@@ -57,10 +60,11 @@ function onTab(tab, i) {
   right: 0;
   height: 124rpx;
   padding-bottom: env(safe-area-inset-bottom);
-  background: rgba(255, 255, 255, 0.97);
-  border-top: 1rpx solid #e8e8ec;
+  background: #fff;
+  border-top: 1rpx solid rgba(0, 0, 0, 0.06);
   display: flex;
   z-index: 100;
+  box-shadow: 0 -4rpx 24rpx rgba(0, 0, 0, 0.06);
 
   .tab-item {
     flex: 1;
@@ -69,7 +73,8 @@ function onTab(tab, i) {
     align-items: center;
     justify-content: center;
     gap: 4rpx;
-    color: #a0a0a8;
+    color: #b0b0bc;
+    position: relative;
     transition: color 0.2s;
 
     &.active {
@@ -80,14 +85,43 @@ function onTab(tab, i) {
       }
     }
 
-    .tab-icon {
-      font-size: 40rpx;
-      line-height: 1;
+    &:active {
+      opacity: 0.7;
     }
+  }
 
-    .tab-label {
-      font-size: 20rpx;
+  .active-dot {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 32rpx;
+    height: 6rpx;
+    background: linear-gradient(90deg, #1a4a8a, #2d6fd6);
+    border-radius: 0 0 4rpx 4rpx;
+  }
+
+  .icon-wrap {
+    width: 56rpx;
+    height: 56rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 16rpx;
+    transition: background 0.2s;
+
+    &--active {
+      background: rgba(31, 71, 136, 0.08);
     }
+  }
+
+  .tab-icon {
+    font-size: 40rpx;
+    line-height: 1;
+  }
+
+  .tab-label {
+    font-size: 20rpx;
   }
 }
 </style>

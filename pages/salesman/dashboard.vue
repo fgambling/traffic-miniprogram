@@ -2,6 +2,7 @@
   <view class="page">
     <!-- Header -->
     <view class="mode-header">
+      <view :style="{ height: statusBarHeight + 'px' }" />
       <view class="header-left">
         <text class="header-title">👤 {{ userInfo?.nickname || '业务员' }}的工作台</text>
       </view>
@@ -65,8 +66,7 @@
         status-bg="#e8f5e9"
         status-color="#17794a"
       />
-
-      <view style="height: 160rpx;" />
+      <view class="tab-spacer" />
     </scroll-view>
 
     <!-- FAB -->
@@ -82,6 +82,7 @@ import TabBar from '../../components/TabBar.vue'
 import StatCard from '../../components/StatCard.vue'
 import FollowCard from '../../components/FollowCard.vue'
 import { useUserStore } from '../../store/user.js'
+import { statusBarHeight } from '../../utils/system.js'
 
 const { state } = useUserStore()
 const userInfo = state.userInfo
@@ -102,7 +103,7 @@ function goCommission() { uni.redirectTo({ url: '/pages/salesman/commission' }) 
 .mode-header {
   background: linear-gradient(135deg, #162d50, #1f4788);
   color: #fff;
-  padding: 80rpx 32rpx 32rpx;
+  padding: 20rpx 32rpx 32rpx;
   display: flex;
   justify-content: space-between;
   align-items: center;

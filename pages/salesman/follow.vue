@@ -1,6 +1,7 @@
 <template>
   <view class="page">
     <view class="page-header">
+      <view :style="{ height: statusBarHeight + 'px' }" />
       <view class="header-title">📋 商家跟进</view>
     </view>
 
@@ -39,8 +40,7 @@
           @click="openDetail(item)"
         />
       </view>
-
-      <view style="height: 160rpx;" />
+      <view class="tab-spacer" />
     </scroll-view>
 
     <!-- FAB 新增 -->
@@ -91,6 +91,7 @@ import { ref, computed } from 'vue'
 import TabBar from '../../components/TabBar.vue'
 import FollowCard from '../../components/FollowCard.vue'
 import BottomSheet from '../../components/BottomSheet.vue'
+import { statusBarHeight } from '../../utils/system.js'
 
 const keyword = ref('')
 const activeFilter = ref(0)
@@ -170,7 +171,7 @@ function submitAdd() {
 .page-header {
   background: linear-gradient(135deg, #162d50, #1f4788);
   color: #fff;
-  padding: 80rpx 32rpx 36rpx;
+  padding: 20rpx 32rpx 36rpx;
   flex-shrink: 0;
 
   .header-title {

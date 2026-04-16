@@ -1,6 +1,7 @@
 <template>
   <view class="page">
     <view class="page-header">
+      <view :style="{ height: statusBarHeight + 'px' }" />
       <view class="header-title">👤 用户画像</view>
       <view class="header-sub">今日 · 328位顾客</view>
     </view>
@@ -49,8 +50,7 @@
           :color="item.color"
         />
       </view>
-
-      <view style="height: 140rpx;" />
+      <view class="tab-spacer" />
     </scroll-view>
 
     <TabBar role="merchant" :current="2" />
@@ -60,6 +60,7 @@
 <script setup>
 import TabBar from '../../components/TabBar.vue'
 import AttrBar from '../../components/AttrBar.vue'
+import { statusBarHeight } from '../../utils/system.js'
 
 const tags = [
   { label: '上班族', pct: 62, bg: '#e4edfa', color: '#1a4a8a' },
@@ -102,7 +103,7 @@ const bottomData = [
 .page-header {
   background: linear-gradient(135deg, #162d50, #1f4788);
   color: #fff;
-  padding: 80rpx 32rpx 36rpx;
+  padding: 20rpx 32rpx 36rpx;
   flex-shrink: 0;
 
   .header-title {
