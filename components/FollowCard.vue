@@ -1,24 +1,27 @@
 <template>
   <view class="follow-card" @click="$emit('click')">
-    <view class="fc-avatar" :style="{ background: avatarBg, color: avatarColor }">
-      <slot name="icon">
-        <text>{{ avatarText }}</text>
-      </slot>
-    </view>
     <view class="fc-info">
-      <view class="fc-name">{{ name }}</view>
+      <view class="fc-name-row">
+        <text class="fc-name">{{ name }}</text>
+      </view>
       <view class="fc-sub" v-if="sub">{{ sub }}</view>
+      <view class="fc-addr" v-if="addr">📍 {{ addr }}</view>
     </view>
-    <view
-      v-if="status"
-      class="fc-status"
-      :style="{ background: statusBg, color: statusColor }"
-    >{{ status }}</view>
-    <view
-      v-if="amount"
-      class="fc-amount"
-      :style="{ color: amountColor }"
-    >{{ amount }}</view>
+    <view class="fc-right">
+      <view class="fc-badges">
+        <view v-if="joint" class="fc-joint">联合跟进</view>
+        <view
+          v-if="status"
+          class="fc-status"
+          :style="{ background: statusBg, color: statusColor }"
+        >{{ status }}</view>
+      </view>
+      <view
+        v-if="amount"
+        class="fc-amount"
+        :style="{ color: amountColor }"
+      >{{ amount }}</view>
+    </view>
   </view>
 </template>
 
@@ -26,14 +29,13 @@
 defineProps({
   name: { type: String, default: '' },
   sub: { type: String, default: '' },
-  avatarBg: { type: String, default: '#e4edfa' },
-  avatarColor: { type: String, default: '#1f4788' },
-  avatarText: { type: String, default: '' },
+  addr: { type: String, default: '' },
   status: { type: String, default: '' },
   statusBg: { type: String, default: '#f0f0f0' },
   statusColor: { type: String, default: '#999' },
   amount: { type: String, default: '' },
-  amountColor: { type: String, default: '#17794a' }
+  amountColor: { type: String, default: '#17794a' },
+  joint: { type: Boolean, default: false }
 })
 defineEmits(['click'])
 </script>
@@ -53,21 +55,14 @@ defineEmits(['click'])
     opacity: 0.85;
   }
 
-  .fc-avatar {
-    width: 84rpx;
-    height: 84rpx;
-    border-radius: 24rpx;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    font-size: 36rpx;
-    font-weight: 700;
-  }
-
   .fc-info {
     flex: 1;
     min-width: 0;
+
+    .fc-name-row {
+      display: flex;
+      align-items: center;
+    }
 
     .fc-name {
       font-size: 26rpx;
@@ -86,20 +81,51 @@ defineEmits(['click'])
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+
+    .fc-addr {
+      font-size: 21rpx;
+      color: #bbb;
+      margin-top: 4rpx;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
   }
 
-  .fc-status {
-    padding: 6rpx 20rpx;
-    border-radius: 20rpx;
-    font-size: 20rpx;
-    font-weight: 600;
+  .fc-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8rpx;
     flex-shrink: 0;
-  }
 
-  .fc-amount {
-    font-size: 28rpx;
-    font-weight: 700;
-    flex-shrink: 0;
+    .fc-badges {
+      display: flex;
+      align-items: center;
+      gap: 10rpx;
+    }
+
+    .fc-joint {
+      font-size: 18rpx;
+      font-weight: 600;
+      color: #6a1b9a;
+      background: #f3e5f5;
+      padding: 3rpx 12rpx;
+      border-radius: 10rpx;
+      white-space: nowrap;
+    }
+
+    .fc-status {
+      padding: 6rpx 20rpx;
+      border-radius: 20rpx;
+      font-size: 20rpx;
+      font-weight: 600;
+    }
+
+    .fc-amount {
+      font-size: 28rpx;
+      font-weight: 700;
+    }
   }
 }
 </style>

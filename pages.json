@@ -20,13 +20,19 @@
       }
     },
     {
-      "path": "pages/merchant/profile",
+      "path": "pages/merchant/ai-advice",
       "style": {
         "navigationStyle": "custom"
       }
     },
     {
-      "path": "pages/merchant/ai-advice",
+      "path": "pages/merchant/mine",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/merchant/rules",
       "style": {
         "navigationStyle": "custom"
       }
@@ -45,6 +51,12 @@
     },
     {
       "path": "pages/salesman/commission",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/salesman/mine",
       "style": {
         "navigationStyle": "custom"
       }

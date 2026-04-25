@@ -1,82 +1,208 @@
 <!--
   UniChart - 基于 uni.createCanvasContext 的轻量图表组件
-  支持 type: 'line' | 'bar'
+  支持 type: 'line' | 'bar' | 'donut'
+  bar      模式：触摸柱体显示 tooltip
+  line     模式：触摸最近数据点显示 tooltip；showPeak=true 时常驻峰值标注
+  donut    模式：data=[v1,v2,...], colors=[c1,c2,...], centerLabel=string
+  compareData   ：折线对比数据（灰色虚线叠加）
+  scrollable    ：数据点 > scrollThreshold 时横向可滚动
 -->
 <template>
   <view class="chart-wrap" :style="`height: ${height}rpx;`">
+    <!-- 可横向滚动模式 -->
+    <scroll-view v-if="isScrollable" scroll-x class="chart-scroll"
+      :style="`width: 100%; height: ${canvasH}px;`">
+      <canvas
+        :canvas-id="canvasId"
+        class="chart-canvas"
+        :style="`width: ${canvasW}px; height: ${canvasH}px; display: block;`"
+        @touchstart="onTouchStart"
+        @touchend="onTouchEnd"
+      />
+    </scroll-view>
+    <!-- 普通模式 -->
     <canvas
+      v-else
       :canvas-id="canvasId"
       class="chart-canvas"
       :style="`width: ${canvasW}px; height: ${canvasH}px;`"
+      @touchstart="onTouchStart"
+      @touchend="onTouchEnd"
     />
   </view>
 </template>
 
 <script setup>
-import { ref, watch, onMounted, getCurrentInstance } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, getCurrentInstance } from 'vue'
 
 const props = defineProps({
-  canvasId: { type: String, required: true },
-  type: { type: String, default: 'line' },   // 'line' | 'bar'
-  data: { type: Array, default: () => [] },
-  labels: { type: Array, default: () => [] },
-  height: { type: Number, default: 280 },     // rpx
-  peakThreshold: { type: Number, default: 50 } // bar: 超过此值标红
+  canvasId:       { type: String,  required: true },
+  type:           { type: String,  default: 'line' },   // 'line' | 'bar' | 'donut'
+  data:           { type: Array,   default: () => [] },
+  labels:         { type: Array,   default: () => [] },
+  colors:         { type: Array,   default: () => [] },  // donut: segment colors
+  centerLabel:    { type: String,  default: '' },        // donut: center text
+  height:         { type: Number,  default: 280 },       // rpx
+  peakThreshold:  { type: Number,  default: 50 },        // bar: 超过此值标红
+  drawDelay:      { type: Number,  default: 150 },       // 初次绘制延迟(ms)
+  // ── 新增 ──────────────────────────────────────────────────
+  compareData:    { type: Array,   default: () => [] },  // 对比折线数据
+  showPeak:       { type: Boolean, default: false },     // 常驻峰值气泡标注
+  scrollable:     { type: Boolean, default: false },     // 数据多时横向滚动
+  scrollThreshold:{ type: Number,  default: 14 },        // 触发滚动的最少数据点数
+  pointW:         { type: Number,  default: 44 }         // 滚动时每个数据点宽度(px)
 })
+
+const emit = defineEmits(['barTouch', 'barRelease', 'lineTouch', 'lineRelease'])
 
 const canvasW = ref(310)
 const canvasH = ref(140)
 const { proxy } = getCurrentInstance()
 
+// 是否启用横向滚动
+const isScrollable = computed(() =>
+  props.scrollable && props.type !== 'donut' && props.data.length > props.scrollThreshold
+)
+
+function updateSize() {
+  const win = uni.getWindowInfo()
+  const baseW = win.windowWidth - 64
+  canvasW.value = isScrollable.value
+    ? Math.max(baseW, props.data.length * props.pointW)
+    : baseW
+  canvasH.value = Math.round((props.height / 750) * win.windowWidth)
+}
+
+// ── 绘制调度：防并发 + 防抖，避免 canvas timeout ─────────────
+let _drawTimer  = null   // 防抖 timer
+let _drawing    = false  // 绘制进行中标志
+let _pendingIdx = -1     // 待绘制的 hoveredIdx
+
+function scheduleDraw(hoveredIdx = -1, delay = 80) {
+  _pendingIdx = hoveredIdx
+  if (_drawTimer) clearTimeout(_drawTimer)
+  _drawTimer = setTimeout(() => {
+    _drawTimer = null
+    if (_drawing) {
+      // 上次 draw 还没结束，再推迟 60ms
+      scheduleDraw(_pendingIdx, 60)
+      return
+    }
+    draw(_pendingIdx)
+  }, delay)
+}
+
+onUnmounted(() => {
+  if (_drawTimer) clearTimeout(_drawTimer)
+})
+
 onMounted(() => {
-  const sys = uni.getSystemInfoSync()
-  // 页面内容宽 = 窗口宽 - 左右 padding 32px*2
-  canvasW.value = sys.windowWidth - 64
-  // rpx 转 px：1rpx = windowWidth / 750
-  canvasH.value = Math.round((props.height / 750) * sys.windowWidth)
-  setTimeout(() => draw(), 150)
+  updateSize()
+  scheduleDraw(-1, props.drawDelay)
 })
 
 watch(() => props.data, () => {
-  setTimeout(() => draw(), 80)
+  updateSize()
+  scheduleDraw(-1, 80)
 }, { deep: true })
 
-function draw() {
+watch(() => props.type, () => {
+  updateSize()
+  scheduleDraw(-1, 80)
+})
+
+// ── 触摸处理 ─────────────────────────────────────────────────
+function onTouchStart(e) {
   if (!props.data.length) return
+  const touch = e.touches[0]
+  if (!touch) return
+  const x = touch.x
+
+  if (props.type === 'bar') {
+    const colW = canvasW.value / props.data.length
+    const idx = Math.floor(x / colW)
+    if (idx >= 0 && idx < props.data.length) {
+      scheduleDraw(idx, 0)
+      emit('barTouch', idx)
+    }
+  } else if (props.type === 'line') {
+    const n = props.data.length
+    if (n === 0) return
+    const stepX = n > 1 ? (canvasW.value - 8) / (n - 1) : canvasW.value
+    const idx = Math.max(0, Math.min(n - 1, Math.round((x - 4) / stepX)))
+    scheduleDraw(idx, 0)
+    emit('lineTouch', idx)
+  }
+}
+
+function onTouchEnd() {
+  if (props.type === 'bar') {
+    scheduleDraw(-1, 0)
+    emit('barRelease')
+  } else if (props.type === 'line') {
+    scheduleDraw(-1, 0)
+    emit('lineRelease')
+  }
+}
+
+// ── 主绘制函数 ────────────────────────────────────────────────
+function draw(hoveredIdx = -1) {
+  if (!props.data.length) return
+  _drawing = true
   const ctx = uni.createCanvasContext(props.canvasId, proxy)
   const w = canvasW.value
   const h = canvasH.value
-  const LABEL_H = 18 // px reserved for x-axis labels
+
+  if (props.type === 'donut') {
+    ctx.clearRect(0, 0, w, h)
+    drawDonut(ctx, w, h)
+    ctx.draw(false, () => { _drawing = false })
+    return
+  }
+
+  const LABEL_H = 18
   const DRAW_H = h - LABEL_H
-  const maxVal = Math.max(...props.data, 1)
+  const maxVal = Math.max(...props.data, ...props.compareData, 1)
 
   ctx.clearRect(0, 0, w, h)
 
   if (props.type === 'bar') {
-    drawBar(ctx, w, DRAW_H, h, maxVal)
+    drawBar(ctx, w, DRAW_H, h, maxVal, hoveredIdx)
   } else {
-    drawLine(ctx, w, DRAW_H, h, maxVal)
+    if (props.compareData.length) drawCompareLine(ctx, w, DRAW_H, maxVal)
+    drawLine(ctx, w, DRAW_H, h, maxVal, hoveredIdx)
   }
 
-  // X 轴标签
   if (props.labels.length) {
-    const step = w / props.labels.length
+    const n = props.labels.length
+    const isLine = props.type === 'line'
+    const lineStepX = n > 1 ? (w - 8) / (n - 1) : w
+    const barStep   = w / n
+
+    // 确定实际会被绘制的最大索引（隔点模式下取最后一个偶数索引）
+    const lastDrawnIdx = n <= 8 ? n - 1 : (n - 1) % 2 === 0 ? n - 1 : n - 2
     props.labels.forEach((lbl, i) => {
-      // 稀疏显示，避免拥挤
-      if (props.labels.length <= 8 || i % 2 === 0 || i === props.labels.length - 1) {
+      if (n <= 8 || i % 2 === 0) {
+        const x = isLine
+          ? 4 + i * lineStepX
+          : barStep * i + barStep / 2
+        // 首标签左对齐、末可见标签右对齐，避免超出 canvas 边界被裁剪
+        const align = i === 0 ? 'left' : (i === lastDrawnIdx ? 'right' : 'center')
         ctx.setFillStyle('#aaa')
         ctx.setFontSize(9)
-        ctx.setTextAlign('center')
-        ctx.fillText(String(lbl), step * i + step / 2, h - 2)
+        ctx.setTextAlign(align)
+        ctx.fillText(String(lbl), x, h - 2)
       }
     })
   }
 
-  ctx.draw()
+  ctx.draw(false, () => { _drawing = false })
 }
 
-function drawBar(ctx, w, drawH, h, maxVal) {
-  const colW = w / props.data.length
+// ── 柱状图（含 tooltip）────────────────────────────────────────
+function drawBar(ctx, w, drawH, h, maxVal, hoveredIdx) {
+  const n = props.data.length
+  const colW = w / n
   const barW = colW * 0.55
 
   props.data.forEach((val, i) => {
@@ -84,12 +210,143 @@ function drawBar(ctx, w, drawH, h, maxVal) {
     const x = colW * i + (colW - barW) / 2
     const y = drawH - barH
     const isPeak = val >= props.peakThreshold
-    ctx.setFillStyle(isPeak ? 'rgba(200,60,50,.65)' : 'rgba(31,71,136,.55)')
+    const isHovered = i === hoveredIdx
+
+    // 柱体颜色：悬停时加深
+    if (isHovered) {
+      ctx.setFillStyle(isPeak ? 'rgba(200,60,50,.9)' : 'rgba(31,71,136,.85)')
+    } else {
+      ctx.setFillStyle(isPeak ? 'rgba(200,60,50,.65)' : 'rgba(31,71,136,.55)')
+    }
     ctx.fillRect(x, y, barW, barH)
+
+    // tooltip
+    if (isHovered) {
+      drawTooltip(ctx, w, x + barW / 2, y, String(val))
+    }
   })
 }
 
-function drawLine(ctx, w, drawH, h, maxVal) {
+// ── tooltip 气泡 ──────────────────────────────────────────────
+function drawTooltip(ctx, canvasWidth, centerX, barTopY, text) {
+  const PAD_X = 10
+  const PAD_Y = 6
+  const FONT_SIZE = 11
+  const tipH = FONT_SIZE + PAD_Y * 2
+  const tipW = text.length * (FONT_SIZE * 0.65) + PAD_X * 2
+  const ARROW = 5   // 小三角高度
+  const R = 5       // 圆角半径
+
+  // 气泡定位：紧贴柱顶，居中，不超出边界
+  let tipX = centerX - tipW / 2
+  tipX = Math.max(R, Math.min(tipX, canvasWidth - tipW - R))
+  const tipY = Math.max(R, barTopY - tipH - ARROW - 4)
+
+  // 背景圆角矩形
+  ctx.setFillStyle('rgba(26,26,46,0.88)')
+  ctx.beginPath()
+  ctx.moveTo(tipX + R, tipY)
+  ctx.lineTo(tipX + tipW - R, tipY)
+  ctx.arc(tipX + tipW - R, tipY + R, R, -Math.PI / 2, 0)
+  ctx.lineTo(tipX + tipW, tipY + tipH - R)
+  ctx.arc(tipX + tipW - R, tipY + tipH - R, R, 0, Math.PI / 2)
+  // 小三角
+  const arrowCX = Math.min(Math.max(centerX, tipX + R + 6), tipX + tipW - R - 6)
+  ctx.lineTo(arrowCX + ARROW, tipY + tipH)
+  ctx.lineTo(arrowCX, tipY + tipH + ARROW)
+  ctx.lineTo(arrowCX - ARROW, tipY + tipH)
+  ctx.lineTo(tipX + R, tipY + tipH)
+  ctx.arc(tipX + R, tipY + tipH - R, R, Math.PI / 2, Math.PI)
+  ctx.lineTo(tipX, tipY + R)
+  ctx.arc(tipX + R, tipY + R, R, Math.PI, -Math.PI / 2)
+  ctx.closePath()
+  ctx.fill()
+
+  // 数值文字
+  ctx.setFillStyle('#fff')
+  ctx.setFontSize(FONT_SIZE)
+  ctx.setTextAlign('center')
+  ctx.fillText(text, tipX + tipW / 2, tipY + PAD_Y + FONT_SIZE - 1)
+}
+
+// ── 环形图（donut） ───────────────────────────────────────────
+// 使用"饼图扇形 + 白色内圆"方式，避免复杂arc路径导致超时
+function drawDonut(ctx, w, h) {
+  const defaultColors = ['#2a5298', '#d64a7a', '#17a2b8', '#e8842a']
+  const colors = props.colors.length ? props.colors : defaultColors
+  const total = props.data.reduce((s, v) => s + v, 0)
+  if (total === 0) return
+
+  const cx = w / 2
+  const cy = h / 2
+  const outerR = Math.min(w, h) / 2 * 0.80
+  const innerR = outerR * 0.55
+
+  let startAngle = -Math.PI / 2  // 从12点方向开始
+
+  // Step1: 画各扇形（从圆心出发的饼图切片）
+  props.data.forEach((val, i) => {
+    if (val <= 0) return
+    const sweep = (val / total) * Math.PI * 2
+    const endAngle = startAngle + sweep
+
+    ctx.beginPath()
+    ctx.moveTo(cx, cy)
+    ctx.arc(cx, cy, outerR, startAngle, endAngle, false)
+    ctx.closePath()
+    ctx.setFillStyle(colors[i % colors.length])
+    ctx.fill()
+
+    startAngle = endAngle
+  })
+
+  // Step2: 白色内圆遮住圆心，形成环形"洞"
+  ctx.beginPath()
+  ctx.arc(cx, cy, innerR, 0, Math.PI * 2, false)
+  ctx.setFillStyle('#ffffff')
+  ctx.fill()
+
+  // Step3: 中心标签文字
+  if (props.centerLabel) {
+    ctx.setFillStyle('#555')
+    ctx.setFontSize(11)
+    ctx.setTextAlign('center')
+    ctx.fillText(props.centerLabel, cx, cy + 4)
+  }
+}
+
+// ── 对比折线（灰色虚线）────────────────────────────────────────
+function drawCompareLine(ctx, w, drawH, maxVal) {
+  const n = props.compareData.length
+  if (n === 0) return
+  const stepX = n > 1 ? (w - 8) / (n - 1) : w
+  const pts = props.compareData.map((val, i) => ({
+    x: 4 + i * stepX,
+    y: 4 + drawH - (val / maxVal) * drawH * 0.9
+  }))
+
+  // 虚线主体
+  ctx.beginPath()
+  pts.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)))
+  ctx.setStrokeStyle('rgba(160,160,170,0.7)')
+  ctx.setLineWidth(1.5)
+  ctx.setLineDash([6, 4])
+  ctx.stroke()
+  ctx.setLineDash([])
+
+  // 对比数据点小圆
+  if (n <= 30) {
+    pts.forEach(p => {
+      ctx.beginPath()
+      ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2)
+      ctx.setFillStyle('rgba(160,160,170,0.7)')
+      ctx.fill()
+    })
+  }
+}
+
+// ── 折线图（含 touch highlight + 峰值标注）──────────────────────
+function drawLine(ctx, w, drawH, h, maxVal, hoveredIdx = -1) {
   const n = props.data.length
   const stepX = n > 1 ? (w - 8) / (n - 1) : w
 
@@ -98,7 +355,7 @@ function drawLine(ctx, w, drawH, h, maxVal) {
     y: 4 + drawH - (val / maxVal) * drawH * 0.9
   }))
 
-  // 填充区
+  // 填充区域
   ctx.beginPath()
   pts.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)))
   ctx.lineTo(pts[pts.length - 1].x, drawH + 4)
@@ -115,6 +372,79 @@ function drawLine(ctx, w, drawH, h, maxVal) {
   ctx.setLineCap('round')
   ctx.setLineJoin('round')
   ctx.stroke()
+
+  // 所有数据点画小圆点（数据点 ≤ 20 时才画，避免密集）
+  if (n <= 20) {
+    pts.forEach((p, i) => {
+      ctx.beginPath()
+      ctx.arc(p.x, p.y, i === hoveredIdx ? 5 : 3, 0, Math.PI * 2, false)
+      ctx.setFillStyle(i === hoveredIdx ? '#1f4788' : 'rgba(31,71,136,.5)')
+      ctx.fill()
+    })
+  }
+
+  // touch highlight：垂直辅助线 + tooltip
+  if (hoveredIdx >= 0 && hoveredIdx < n) {
+    const pt = pts[hoveredIdx]
+
+    // 垂直辅助线
+    ctx.beginPath()
+    ctx.moveTo(pt.x, 4)
+    ctx.lineTo(pt.x, drawH + 4)
+    ctx.setStrokeStyle('rgba(31,71,136,0.25)')
+    ctx.setLineWidth(1)
+    ctx.stroke()
+
+    // tooltip 气泡
+    drawTooltip(ctx, w, pt.x, pt.y, String(props.data[hoveredIdx]))
+  }
+
+  // ── 常驻峰值标注（showPeak=true 且未触摸该点时显示）──────────
+  // 样式：红色实心圆 + 正上方红色小标签（无箭头），区别于触摸时的深色气泡
+  if (props.showPeak) {
+    const peakVal = Math.max(...props.data)
+    const peakIdx = props.data.indexOf(peakVal)
+    if (peakIdx >= 0 && peakIdx !== hoveredIdx) {
+      const pt = pts[peakIdx]
+
+      // 红色实心圆点（峰值专用，比普通点大）
+      ctx.beginPath()
+      ctx.arc(pt.x, pt.y, 5, 0, Math.PI * 2)
+      ctx.setFillStyle('#e53935')
+      ctx.fill()
+
+      // 红色无箭头标签，紧贴圆点上方
+      const text  = '▲ ' + String(peakVal)
+      const FONT  = 10
+      const PAD_X = 8
+      const PAD_Y = 4
+      const tipW  = text.length * (FONT * 0.62) + PAD_X * 2
+      const tipH  = FONT + PAD_Y * 2
+      const R     = 5
+      let tipX = pt.x - tipW / 2
+      tipX = Math.max(R, Math.min(tipX, w - tipW - R))
+      const tipY = Math.max(R, pt.y - tipH - 10)
+
+      ctx.setFillStyle('rgba(229,57,53,0.92)')
+      ctx.beginPath()
+      ctx.moveTo(tipX + R, tipY)
+      ctx.lineTo(tipX + tipW - R, tipY)
+      ctx.arc(tipX + tipW - R, tipY + R, R, -Math.PI / 2, 0)
+      ctx.lineTo(tipX + tipW, tipY + tipH - R)
+      ctx.arc(tipX + tipW - R, tipY + tipH - R, R, 0, Math.PI / 2)
+      ctx.lineTo(tipX + R, tipY + tipH)
+      ctx.arc(tipX + R, tipY + tipH - R, R, Math.PI / 2, Math.PI)
+      ctx.lineTo(tipX, tipY + R)
+      ctx.arc(tipX + R, tipY + R, R, Math.PI, -Math.PI / 2)
+      ctx.closePath()
+      ctx.fill()
+
+      ctx.setFillStyle('#fff')
+      ctx.setFontSize(FONT)
+      ctx.setTextAlign('center')
+      ctx.fillText(text, tipX + tipW / 2, tipY + PAD_Y + FONT - 1)
+    }
+  }
 }
 </script>
 
@@ -122,9 +452,14 @@ function drawLine(ctx, w, drawH, h, maxVal) {
 .chart-wrap {
   width: 100%;
   overflow: hidden;
+}
 
-  .chart-canvas {
-    display: block;
-  }
+.chart-scroll {
+  /* 横向滚动容器 */
+  white-space: nowrap;
+}
+
+.chart-canvas {
+  display: block;
 }
 </style>

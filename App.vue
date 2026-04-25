@@ -27,9 +27,21 @@ page {
   font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', sans-serif;
 }
 
-/* TabBar 底部安全占位（scroll-view 不识别 padding-bottom，必须用真实子元素） */
+/* TabBar flex 占位符：在 scroll-view 外部占据 TabBar 的高度，
+   让 scroll-view 不延伸到 TabBar 区域，彻底解决内容被遮挡问题 */
+.tab-bar-placeholder {
+  flex-shrink: 0;
+  height: 96rpx;
+  padding-bottom: env(safe-area-inset-bottom);
+  box-sizing: content-box;
+  pointer-events: none;
+}
+
+/* scroll-view 内底部留白：预留 TabBar 高度 + 安全区 + 内边距，防止内容被 TabBar 遮挡 */
 .tab-spacer {
-  height: calc(124rpx + env(safe-area-inset-bottom));
+  height: 96rpx;
+  padding-bottom: calc(env(safe-area-inset-bottom) + 32rpx);
+  box-sizing: content-box;
   flex-shrink: 0;
 }
 

@@ -1,15 +1,15 @@
 import { reactive } from 'vue'
 import { getToken, getRole, getUserInfo, setToken, setRole, setUserInfo, clearAuth } from '../utils/auth.js'
 
-// 简单响应式单例 store（兼容无 Pinia 环境）
 const state = reactive({
   token: getToken(),
-  role: getRole(),    // 'merchant' | 'salesman'
+  role: getRole(),
   userInfo: getUserInfo()
 })
 
 export function useUserStore() {
-  function login({ token, role, userInfo }) {
+  function login({ token, role, userId, merchantId, salesmanId, name }) {
+    const userInfo = { userId, merchantId, salesmanId, name, nickname: name }
     state.token = token
     state.role = role
     state.userInfo = userInfo

@@ -7,7 +7,9 @@
         <view class="close-btn" @click="$emit('close')">✕</view>
       </view>
       <scroll-view class="sheet-body" scroll-y>
-        <slot />
+        <view class="sheet-body-inner">
+          <slot />
+        </view>
       </scroll-view>
     </view>
   </view>
@@ -28,12 +30,11 @@ defineEmits(['close'])
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.35);
   z-index: 200;
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  backdrop-filter: blur(2px);
 
   .sheet {
     background: #fff;
@@ -83,8 +84,17 @@ defineEmits(['close'])
 
     .sheet-body {
       flex: 1;
-      padding: 24rpx 40rpx 60rpx;
+      width: 100%;
+      box-sizing: border-box;
       overflow-y: auto;
+      white-space: normal;
+
+      .sheet-body-inner {
+        padding: 24rpx 40rpx 60rpx;
+        box-sizing: border-box;
+        width: 100%;
+        white-space: normal;
+      }
     }
   }
 }

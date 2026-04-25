@@ -27,15 +27,15 @@ const props = defineProps({
 const merchantTabs = [
   { label: '首页',   icon: '🏠', url: '/pages/merchant/dashboard' },
   { label: '趋势',   icon: '📊', url: '/pages/merchant/trend' },
-  { label: '画像',   icon: '👤', url: '/pages/merchant/profile' },
-  { label: 'AI建议', icon: '💡', url: '/pages/merchant/ai-advice' }
+  { label: 'AI建议', icon: '💡', url: '/pages/merchant/ai-advice' },
+  { label: '我的',   icon: '⚙️', url: '/pages/merchant/mine' }
 ]
 
 const salesmanTabs = [
   { label: '工作台', icon: '🖥', url: '/pages/salesman/dashboard' },
   { label: '商家',   icon: '🏪', url: '/pages/salesman/follow' },
   { label: '佣金',   icon: '💰', url: '/pages/salesman/commission' },
-  { label: '我的',   icon: '⚙️', url: '' }
+  { label: '我的',   icon: '⚙️', url: '/pages/salesman/mine' }
 ]
 
 const tabs = computed(() =>
@@ -58,7 +58,7 @@ function onTab(tab, i) {
   bottom: 0;
   left: 0;
   right: 0;
-  height: 124rpx;
+  height: 96rpx;
   padding-bottom: env(safe-area-inset-bottom);
   background: #fff;
   border-top: 1rpx solid rgba(0, 0, 0, 0.06);

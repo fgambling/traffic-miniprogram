@@ -44,5 +44,5 @@ export function clearAuth() {
 
 export function logout() {
   clearAuth()
-  uni.reLaunch({ url: '/pages/login/login' })
+  setTimeout(() => uni.reLaunch({ url: '/pages/login/login' }), 100)
 }
