@@ -41,15 +41,17 @@
         <view v-else class="pkg-top-hint">已是最高版本</view>
       </view>
 
-      <!-- 门店管理 -->
-      <view class="section-title">门店管理</view>
-      <view class="menu-card">
-        <view class="menu-row" @click="showStoreSheet = true">
-          <text class="menu-label">切换门店</text>
-          <text class="menu-val">{{ storeName }}</text>
-          <text class="menu-arrow">›</text>
+      <!-- 门店管理：仅多门店时展示 -->
+      <template v-if="hasMultiStore">
+        <view class="section-title">门店管理</view>
+        <view class="menu-card">
+          <view class="menu-row" @click="showStoreSheet = true">
+            <text class="menu-label">切换门店</text>
+            <text class="menu-val">{{ storeName }}</text>
+            <text class="menu-arrow">›</text>
+          </view>
         </view>
-      </view>
+      </template>
 
       <!-- 账号设置 -->
       <view class="section-title">账号设置</view>
@@ -57,6 +59,10 @@
         <view class="menu-row" @click="showPhoneSheet = true">
           <text class="menu-label">绑定手机号</text>
           <text class="menu-val">{{ phoneMasked }}</text>
+          <text class="menu-arrow">›</text>
+        </view>
+        <view class="menu-row" @click="openPwdSheet">
+          <text class="menu-label">修改密码</text>
           <text class="menu-arrow">›</text>
         </view>
         <view class="menu-row" @click="showAbout">
@@ -94,20 +100,39 @@
 
     <!-- 切换门店弹层 -->
     <BottomSheet :show="showStoreSheet" title="切换门店" @close="showStoreSheet = false">
-      <view v-if="storeList.length === 0" class="empty-hint">
-        <text>暂无其他门店</text>
-      </view>
-      <view v-else class="store-list">
+      <view class="store-list">
         <view
           v-for="s in storeList"
-          :key="s.id"
+          :key="s.merchantId"
           class="store-item"
-          :class="{ active: s.id === currentStoreId }"
+          :class="{ active: s.merchantId === currentStoreId }"
           @click="switchStore(s)"
         >
-          <text class="si-name">{{ s.name }}</text>
-          <text v-if="s.id === currentStoreId" class="si-tag">当前</text>
+          <view class="si-info">
+            <text class="si-name">{{ s.name }}</text>
+            <text v-if="s.address" class="si-addr">{{ s.address }}</text>
+          </view>
+          <text v-if="s.merchantId === currentStoreId" class="si-tag">当前</text>
         </view>
+      </view>
+    </BottomSheet>
+
+    <!-- 修改密码弹层 -->
+    <BottomSheet :show="showPwdSheet" title="修改密码" @close="closePwdSheet">
+      <view class="form">
+        <view class="form-row">
+          <text class="form-label">原密码</text>
+          <input class="form-input" v-model="pwdForm.old" :password="true" placeholder="请输入原密码" />
+        </view>
+        <view class="form-row">
+          <text class="form-label">新密码</text>
+          <input class="form-input" v-model="pwdForm.next" :password="true" placeholder="至少6位" />
+        </view>
+        <view class="form-row">
+          <text class="form-label">确认密码</text>
+          <input class="form-input" v-model="pwdForm.confirm" :password="true" placeholder="再次输入新密码" />
+        </view>
+        <button class="btn-primary" @click="submitPwd">确认修改</button>
       </view>
     </BottomSheet>
 
@@ -163,9 +188,9 @@ import TabBar from '../../components/TabBar.vue'
 import BottomSheet from '../../components/BottomSheet.vue'
 import { useUserStore } from '../../store/user.js'
 import { statusBarHeight } from '../../utils/system.js'
-import { get, post } from '../../utils/request.js'
+import { get, post, put } from '../../utils/request.js'
 
-const { state, logout } = useUserStore()
+const { state, login, logout } = useUserStore()
 const userInfo = state.userInfo
 
 // ── 基础信息 ────────────────────────────────────────────────
@@ -188,19 +213,24 @@ const aiFeature = computed(() => {
 })
 
 // ── 门店列表 ────────────────────────────────────────────────
-const storeList = ref([])
+const storeList    = ref([])
+const storePhone   = ref('')   // 当前商家绑定的手机号（切换时需要传给后端）
 
 // ── 弹层状态 ────────────────────────────────────────────────
 const showPhoneSheet   = ref(false)
 const showStoreSheet   = ref(false)
 const showUpgradeSheet = ref(false)
+const showPwdSheet     = ref(false)
 const phoneInput       = ref('')
+const pwdForm          = ref({ old: '', next: '', confirm: '' })
 
 // ── 计算属性 ────────────────────────────────────────────────
-const avatarText = computed(() => (storeName.value || '店')[0])
+const avatarText  = computed(() => (storeName.value || '店')[0])
+const hasMultiStore = computed(() => storeList.value.length > 1)
 const phoneMasked = computed(() => {
-  if (!phone.value || phone.value.length < 11) return phone.value || '未绑定'
-  return phone.value.slice(0, 3) + '****' + phone.value.slice(7)
+  const p = phone.value
+  if (!p || p.length < 11) return p || '未绑定'
+  return p.slice(0, 3) + '****' + p.slice(7)
 })
 
 // ── 数据加载 ────────────────────────────────────────────────
@@ -208,9 +238,18 @@ async function fetchMerchantInfo() {
   try {
     const data = await get('/api/merchant/dashboard', {}, { showLoad: false })
     if (data) {
-      storeName.value    = data.merchantName  || storeName.value
+      storeName.value = data.merchantName || storeName.value
       if (data.packageType) packageType.value = data.packageType
     }
+  } catch (_) {}
+}
+
+async function fetchStores() {
+  try {
+    const data = await get('/api/merchant/stores', {}, { showLoad: false })
+    storeList.value  = data.stores  || []
+    storePhone.value = data.phone   || ''
+    phone.value      = data.phone   || ''
   } catch (_) {}
 }
 
@@ -222,24 +261,21 @@ function handleUpgrade(targetTier) {
     content: `确认升级到${names[targetTier]}？正式版本将跳转至支付流程，当前为演示模式。`,
     confirmText: '确认',
     success: ({ confirm }) => {
-      if (confirm) {
-        uni.showToast({ title: '功能开发中，敬请期待', icon: 'none' })
-      }
+      if (confirm) uni.showToast({ title: '功能开发中，敬请期待', icon: 'none' })
     }
   })
 }
 
 onMounted(() => {
   fetchMerchantInfo()
-  phoneInput.value = phone.value
+  fetchStores()
 })
 
 // ── 绑定手机号 ──────────────────────────────────────────────
 function savePhone() {
   const val = phoneInput.value.trim()
   if (!/^1\d{10}$/.test(val)) {
-    uni.showToast({ title: '请输入正确的手机号', icon: 'none' })
-    return
+    uni.showToast({ title: '请输入正确的手机号', icon: 'none' }); return
   }
   phone.value = val
   showPhoneSheet.value = false
@@ -247,11 +283,64 @@ function savePhone() {
 }
 
 // ── 切换门店 ────────────────────────────────────────────────
-function switchStore(store) {
-  currentStoreId.value = store.id
-  storeName.value = store.name
-  showStoreSheet.value = false
-  uni.showToast({ title: `已切换到 ${store.name}`, icon: 'success' })
+async function switchStore(store) {
+  if (store.merchantId === currentStoreId.value) {
+    showStoreSheet.value = false; return
+  }
+  try {
+    const data = await post('/api/auth/merchant-select', {
+      phone:      storePhone.value,
+      merchantId: store.merchantId
+    }, { showLoad: false })
+
+    // 更新 token 和 userInfo
+    login({
+      token:      data.token,
+      role:       'merchant',
+      userId:     data.userId || store.merchantId,
+      merchantId: store.merchantId,
+      name:       store.name
+    })
+
+    showStoreSheet.value = false
+    currentStoreId.value = store.merchantId
+    storeName.value      = store.name
+
+    uni.showToast({ title: `已切换到 ${store.name}`, icon: 'success' })
+    // 刷新当前页面数据
+    setTimeout(() => {
+      fetchMerchantInfo()
+      fetchStores()
+    }, 300)
+  } catch (e) {
+    uni.showToast({ title: '切换失败，请重试', icon: 'none' })
+  }
+}
+
+// ── 修改密码 ────────────────────────────────────────────────
+function openPwdSheet() {
+  pwdForm.value = { old: '', next: '', confirm: '' }
+  showPwdSheet.value = true
+}
+function closePwdSheet() {
+  showPwdSheet.value = false
+}
+async function submitPwd() {
+  const { old, next, confirm } = pwdForm.value
+  if (!old || !next || !confirm) {
+    uni.showToast({ title: '请填写所有字段', icon: 'none' }); return
+  }
+  if (next.length < 6) {
+    uni.showToast({ title: '新密码不能少于6位', icon: 'none' }); return
+  }
+  if (next !== confirm) {
+    uni.showToast({ title: '两次密码不一致', icon: 'none' }); return
+  }
+  try {
+    await put('/api/merchant/password', { oldPassword: old, newPassword: next })
+    uni.showToast({ title: '密码修改成功', icon: 'success' })
+    showPwdSheet.value = false
+  } catch (_) {}
 }
 
 // ── 关于 & 退出 ─────────────────────────────────────────────
@@ -553,11 +642,22 @@ function confirmLogout() {
 
     &:active { opacity: 0.8; }
 
-    .si-name {
+    .si-info {
       flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 6rpx;
+    }
+
+    .si-name {
       font-size: 28rpx;
       color: #1a1a2e;
       font-weight: 500;
+    }
+
+    .si-addr {
+      font-size: 22rpx;
+      color: #999;
     }
 
     .si-tag {
@@ -567,6 +667,7 @@ function confirmLogout() {
       padding: 4rpx 14rpx;
       border-radius: 16rpx;
       font-weight: 600;
+      flex-shrink: 0;
     }
   }
 }

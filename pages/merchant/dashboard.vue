@@ -7,14 +7,6 @@
         <view class="store-name">
           <text>{{ storeName }}</text>
         </view>
-        <view class="top-right-group">
-          <view class="top-right" @click="showStoreSheet = true">
-            <text class="switch-text">切换</text>
-          </view>
-          <view class="top-right dev-logout" @click="devLogout">
-            <text class="switch-text">退出</text>
-          </view>
-        </view>
       </view>
 
       <!-- 核心数字 -->
@@ -130,28 +122,6 @@
           :peak-threshold="hourlyPeak"
         />
         <view v-else class="chart-placeholder" :style="{ height: '280rpx' }" />
-      </view>
-
-      <!-- 快捷入口 -->
-      <view class="card mx-pad quick-card">
-        <view class="quick-grid">
-          <view class="quick-item" @click="goTrend">
-            <view class="qi-icon" style="background:#e4edfa;">📊</view>
-            <text class="qi-label">客流趋势</text>
-          </view>
-          <view class="quick-item" @click="goAI">
-            <view class="qi-icon" style="background:#e8f5e9;">💡</view>
-            <text class="qi-label">AI建议</text>
-          </view>
-          <view class="quick-item" @click="goMine">
-            <view class="qi-icon" style="background:#fff3e0;">⚙️</view>
-            <text class="qi-label">我的</text>
-          </view>
-          <view class="quick-item" @click="doRefresh">
-            <view class="qi-icon" style="background:#fce4ec;">🔄</view>
-            <text class="qi-label">立即刷新</text>
-          </view>
-        </view>
       </view>
 
       <!-- 数据来源 -->

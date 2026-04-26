@@ -161,7 +161,8 @@ import TabBar from '../../components/TabBar.vue'
 import UniChart from '../../components/UniChart.vue'
 import { useUserStore } from '../../store/user.js'
 import { statusBarHeight } from '../../utils/system.js'
-import { get } from '../../utils/request.js'
+import { get, BASE_URL } from '../../utils/request.js'
+import { getToken } from '../../utils/auth.js'
 
 const { state } = useUserStore()
 const userInfo = state.userInfo
@@ -285,11 +286,10 @@ async function onRefresh() {
 
 function exportExcel() {
   uni.showLoading({ title: '生成中...' })
-  const baseUrl = uni.getStorageSync('baseUrl') || 'http://localhost:8080'
-  const token   = uni.getStorageSync('token') || ''
+  const token = getToken()
 
   uni.request({
-    url: `${baseUrl}/api/salesman/performance/export`,
+    url: `${BASE_URL}/api/salesman/performance/export`,
     method: 'GET',
     header: { Authorization: `Bearer ${token}` },
     success: (res) => {
@@ -298,16 +298,17 @@ function exportExcel() {
       if (!fileUrl) { uni.showToast({ title: '导出失败', icon: 'none' }); return }
       // 下载并打开
       uni.downloadFile({
-        url: `${baseUrl}${fileUrl}`,
+        url: `${BASE_URL}${fileUrl}`,
+        header: { Authorization: `Bearer ${token}` },
         success: ({ tempFilePath }) => {
           uni.openDocument({
             filePath: tempFilePath,
             fileType: 'xlsx',
+            showMenu: true,
             fail: () => {
-              // 无法打开时提示复制链接
               uni.showModal({
                 title: '文件已生成',
-                content: '请在浏览器中访问：' + baseUrl + fileUrl,
+                content: '无法自动打开，请在浏览器访问：' + BASE_URL + fileUrl,
                 showCancel: false
               })
             }

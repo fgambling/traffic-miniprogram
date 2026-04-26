@@ -135,7 +135,7 @@
 
         <!-- ── 操作按钮（已失效只保留更新状态+删除） ── -->
         <view class="action-bar">
-          <view v-if="detailStatus !== 3" class="action-btn" :class="{ active: activePanel === 'info' }" @click="togglePanel('info')">
+          <view v-if="detailStatus !== 3 && detailStatus !== 2" class="action-btn" :class="{ active: activePanel === 'info' }" @click="togglePanel('info')">
             <text class="action-icon">✏️</text>
             <text class="action-label">更改信息</text>
           </view>
@@ -236,7 +236,7 @@
             <view v-if="newStatus === 2" class="voucher-section" style="margin-top:8rpx">
               <text class="pf-label">合作证明图片</text>
               <view v-if="detailVoucherUrl" class="voucher-preview" @click="previewVoucher">
-                <image :src="detailVoucherUrl" class="voucher-img" mode="aspectFill" />
+                <image :src="toFullUrl(detailVoucherUrl)" class="voucher-img" mode="aspectFill" />
                 <view class="voucher-change" @click.stop="chooseVoucher">重新上传</view>
               </view>
               <button v-else class="btn-voucher" @click="chooseVoucher">📷 上传合作证明</button>
@@ -270,7 +270,7 @@
           />
           <!-- 图片附件 -->
           <view v-if="newRecordImageUrl" class="record-img-preview" @click="previewRecordImg">
-            <image :src="newRecordImageUrl" class="record-img" mode="aspectFill" />
+            <image :src="toFullUrl(newRecordImageUrl)" class="record-img" mode="aspectFill" />
             <view class="record-img-remove" @click.stop="newRecordImageUrl = ''">✕</view>
           </view>
           <view v-else class="btn-add-img" @click="chooseRecordImage">
@@ -300,8 +300,8 @@
                   {{ rec.type === 'status' ? '状态' : '记录' }}
                 </view>
                 <text class="hi-content">{{ rec.content }}</text>
-                <image v-if="rec.imageUrl" :src="rec.imageUrl" class="hi-img" mode="aspectFill"
-                  @click="uni.previewImage({ urls: [rec.imageUrl], current: rec.imageUrl })" />
+                <image v-if="rec.imageUrl" :src="toFullUrl(rec.imageUrl)" class="hi-img" mode="aspectFill"
+                  @click="uni.previewImage({ urls: [toFullUrl(rec.imageUrl)], current: toFullUrl(rec.imageUrl) })" />
                 <text class="hi-time">{{ formatDateTime(rec.createdAt) }}</text>
               </view>
             </view>
@@ -676,6 +676,13 @@ async function submitRecord() {
   }
 }
 
+/** 将相对路径或旧的完整 URL 统一转为可访问的完整 URL */
+function toFullUrl(url) {
+  if (!url) return ''
+  if (url.startsWith('http')) return url   // 旧数据已是完整 URL，直接用
+  return BASE_URL + url                    // 新数据是相对路径，拼上 BASE_URL
+}
+
 function chooseRecordImage() {
   uni.chooseImage({
     count: 1,
@@ -687,7 +694,8 @@ function chooseRecordImage() {
 
 function previewRecordImg() {
   if (newRecordImageUrl.value) {
-    uni.previewImage({ urls: [newRecordImageUrl.value], current: newRecordImageUrl.value })
+    const full = toFullUrl(newRecordImageUrl.value)
+    uni.previewImage({ urls: [full], current: full })
   }
 }
 
@@ -703,7 +711,8 @@ function chooseVoucher() {
 
 function previewVoucher() {
   if (detailVoucherUrl.value) {
-    uni.previewImage({ urls: [detailVoucherUrl.value], current: detailVoucherUrl.value })
+    const full = toFullUrl(detailVoucherUrl.value)
+    uni.previewImage({ urls: [full], current: full })
   }
 }
 
@@ -720,7 +729,7 @@ function uploadImage(tempPath, target) {
       try {
         const body = JSON.parse(res.data)
         if (body.code !== 0) throw new Error(body.message || '上传失败')
-        const url = BASE_URL + body.data.url
+        const url = body.data.url   // 存相对路径，显示时动态拼 BASE_URL
         if (target === 'voucher') {
           detailVoucherUrl.value = url
           uni.showToast({ title: '凭证已上传', icon: 'success' })

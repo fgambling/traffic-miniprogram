@@ -24,7 +24,7 @@
 
       <button
         class="btn btn-wechat"
-        @click="showMerchantForm = true"
+        @click="showMerchantForm = true; showSalesmanForm = false"
         :disabled="loading"
       >
         <text class="btn-text">商家端登录</text>
@@ -54,7 +54,7 @@
 
       <button
         class="btn btn-salesman"
-        @click="showSalesmanForm = true"
+        @click="showSalesmanForm = true; showMerchantForm = false"
         :disabled="loading"
       >
         <text class="btn-text">业务员工号登录</text>
@@ -88,7 +88,23 @@
         和
         <text class="link">隐私政策</text>
       </view>
+    </view>
 
+    <!-- 多商家选择弹窗 -->
+    <view v-if="showSelectSheet" class="sheet-mask" @click.self="showSelectSheet = false">
+      <view class="sheet">
+        <view class="sheet-title">请选择要登录的店铺</view>
+        <view
+          v-for="item in merchantList"
+          :key="item.merchantId"
+          class="sheet-item"
+          @click="selectMerchant(item.merchantId)"
+        >
+          <view class="sheet-item-name">{{ item.name }}</view>
+          <view class="sheet-item-addr">{{ item.address || item.licenseNo }}</view>
+        </view>
+        <view class="sheet-cancel" @click="showSelectSheet = false">取消</view>
+      </view>
     </view>
   </view>
 </template>
@@ -105,7 +121,20 @@ const merchantPassword  = ref('')
 const showSalesmanForm  = ref(false)
 const salesmanPhone     = ref('')
 const salesmanPassword  = ref('')
+const showSelectSheet   = ref(false)
+const merchantList      = ref([])
 const { login } = useUserStore()
+
+function doMerchantLogin(data) {
+  login({
+    token:      data.token,
+    role:       data.role,
+    userId:     data.userId,
+    merchantId: data.merchantId,
+    name:       data.name
+  })
+  setTimeout(() => uni.reLaunch({ url: '/pages/merchant/dashboard' }), 100)
+}
 
 async function merchantLogin() {
   if (!merchantPhone.value || !merchantPassword.value) {
@@ -117,17 +146,32 @@ async function merchantLogin() {
       phone:    merchantPhone.value,
       password: merchantPassword.value
     }, { showLoad: false })
-    login({
-      token:      data.token,
-      role:       data.role,
-      userId:     data.userId,
-      merchantId: data.merchantId,
-      name:       data.name
-    })
-    setTimeout(() => uni.reLaunch({ url: '/pages/merchant/dashboard' }), 100)
+
+    if (data.needSelect) {
+      merchantList.value = data.merchants
+      showSelectSheet.value = true
+    } else {
+      doMerchantLogin(data)
+    }
   } catch (e) {
     const msg = e?.data?.message || '手机号或密码错误'
     uni.showToast({ title: msg, icon: 'none' })
+  } finally {
+    loading.value = false
+  }
+}
+
+async function selectMerchant(merchantId) {
+  showSelectSheet.value = false
+  loading.value = true
+  try {
+    const data = await post('/api/auth/merchant-select', {
+      phone:      merchantPhone.value,
+      merchantId: merchantId
+    }, { showLoad: false })
+    doMerchantLogin(data)
+  } catch (e) {
+    uni.showToast({ title: '登录失败，请重试', icon: 'none' })
   } finally {
     loading.value = false
   }
@@ -323,6 +367,62 @@ async function salesmanLogin() {
 
   .link {
     color: #1f4788;
+  }
+}
+
+/* 多商家选择弹窗 */
+.sheet-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 100;
+  display: flex;
+  align-items: flex-end;
+}
+
+.sheet {
+  width: 100%;
+  background: #fff;
+  border-radius: 32rpx 32rpx 0 0;
+  padding: 40rpx 40rpx 60rpx;
+
+  .sheet-title {
+    font-size: 30rpx;
+    font-weight: 600;
+    color: #333;
+    text-align: center;
+    margin-bottom: 32rpx;
+  }
+
+  .sheet-item {
+    padding: 28rpx 24rpx;
+    border-radius: 20rpx;
+    background: #f4f6fa;
+    margin-bottom: 16rpx;
+
+    &:active {
+      background: #e8edf5;
+    }
+
+    .sheet-item-name {
+      font-size: 30rpx;
+      font-weight: 600;
+      color: #1f4788;
+      margin-bottom: 8rpx;
+    }
+
+    .sheet-item-addr {
+      font-size: 24rpx;
+      color: #888;
+    }
+  }
+
+  .sheet-cancel {
+    text-align: center;
+    font-size: 28rpx;
+    color: #aaa;
+    margin-top: 24rpx;
+    padding: 12rpx;
   }
 }
 

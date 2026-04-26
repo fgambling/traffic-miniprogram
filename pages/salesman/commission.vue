@@ -63,6 +63,7 @@
             v-for="item in commissionList"
             :key="item.id"
             class="list-card"
+            @click="openMerchantDetail(item)"
           >
             <view class="lc-icon" style="background:#e8f5e9;">💰</view>
             <view class="lc-info">
@@ -131,6 +132,45 @@
 
     <TabBar role="salesman" :current="2" />
 
+    <!-- 商家详情弹层 -->
+    <BottomSheet :show="showMerchantDetail" title="" @close="showMerchantDetail = false">
+      <view v-if="detailMerchant" class="detail-body">
+        <view class="detail-hero">
+          <view class="detail-hero-info">
+            <text class="detail-name">{{ detailMerchant.merchantName }}</text>
+            <text class="detail-time">合作时间：{{ formatDate(detailMerchant.cooperationTime) }}</text>
+          </view>
+          <view class="detail-status-badge">已合作</view>
+        </view>
+        <view class="detail-section">
+          <view class="detail-row" v-if="detailMerchant.contactPerson">
+            <text class="dr-label">联系人</text>
+            <text class="dr-val">{{ detailMerchant.contactPerson }}</text>
+          </view>
+          <view class="detail-row" v-if="detailMerchant.contactPhone">
+            <text class="dr-label">电话</text>
+            <text class="dr-val">{{ detailMerchant.contactPhone }}</text>
+          </view>
+          <view class="detail-row" v-if="detailMerchant.address">
+            <text class="dr-label">地址</text>
+            <text class="dr-val">{{ detailMerchant.address }}</text>
+          </view>
+          <view class="detail-row" v-if="detailMerchant.licenseNo">
+            <text class="dr-label">营业执照</text>
+            <text class="dr-val">{{ detailMerchant.licenseNo }}</text>
+          </view>
+          <view class="detail-row" v-if="detailMerchant.commission">
+            <text class="dr-label">合作金额</text>
+            <text class="dr-val">¥{{ fmtAmt(detailMerchant.commission) }}</text>
+          </view>
+          <view class="detail-row">
+            <text class="dr-label">到账佣金</text>
+            <text class="dr-val amount">¥{{ fmtAmt(detailMerchant.earnedCommission) }}</text>
+          </view>
+        </view>
+      </view>
+    </BottomSheet>
+
     <!-- 提现申请弹层 -->
     <BottomSheet :show="showWithdrawSheet" title="申请提现" @close="showWithdrawSheet = false">
       <view class="form">
@@ -197,6 +237,14 @@ const withdrawTotal = ref(0)
 
 const showWithdrawSheet = ref(false)
 const withdrawForm = ref({ amount: '', way: 1, account: '' })
+
+const showMerchantDetail = ref(false)
+const detailMerchant = ref(null)
+
+function openMerchantDetail(item) {
+  detailMerchant.value = item
+  showMerchantDetail.value = true
+}
 
 const statusColors = {
   0: { bg: '#fff3e0', color: '#e65100' },
@@ -500,6 +548,83 @@ onMounted(async () => {
   .empty-icon  { font-size: 96rpx; margin-bottom: 24rpx; opacity: 0.4; }
   .empty-title { font-size: 30rpx; color: #999; font-weight: 500; margin-bottom: 12rpx; }
   .empty-sub   { font-size: 24rpx; color: #ccc; }
+}
+
+/* 商家详情弹层 */
+.detail-body {
+  padding: 0 4rpx 32rpx;
+}
+
+.detail-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 28rpx;
+
+  .detail-hero-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .detail-name {
+    display: block;
+    font-size: 36rpx;
+    font-weight: 700;
+    color: #1a1a2e;
+    margin-bottom: 6rpx;
+  }
+
+  .detail-time {
+    font-size: 24rpx;
+    color: #aaa;
+  }
+}
+
+.detail-status-badge {
+  background: #e8f5e9;
+  color: #17794a;
+  font-size: 22rpx;
+  font-weight: 600;
+  padding: 8rpx 20rpx;
+  border-radius: 20rpx;
+  flex-shrink: 0;
+  margin-left: 16rpx;
+}
+
+.detail-section {
+  background: #f8f9fa;
+  border-radius: 16rpx;
+  padding: 8rpx 24rpx;
+  margin-bottom: 24rpx;
+}
+
+.detail-row {
+  display: flex;
+  align-items: flex-start;
+  padding: 18rpx 0;
+  border-bottom: 1rpx solid #f0f0f0;
+
+  &:last-child { border-bottom: none; }
+
+  .dr-label {
+    font-size: 26rpx;
+    color: #999;
+    width: 140rpx;
+    flex-shrink: 0;
+  }
+
+  .dr-val {
+    flex: 1;
+    font-size: 26rpx;
+    color: #1a1a2e;
+    line-height: 1.5;
+
+    &.amount {
+      font-size: 32rpx;
+      font-weight: 700;
+      color: #17794a;
+    }
+  }
 }
 
 /* 提现方式选择 */
