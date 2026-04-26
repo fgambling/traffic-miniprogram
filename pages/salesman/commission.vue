@@ -5,7 +5,6 @@
       <view class="nav-bar">
         <view class="header-title">佣金提现</view>
       </view>
-      <view class="header-sub">累计佣金 ¥{{ fmtAmt(profile.totalCommission) }}</view>
     </view>
 
     <scroll-view
@@ -71,7 +70,7 @@
               <view class="lc-sub">合作时间：{{ formatDate(item.cooperationTime) }}</view>
             </view>
             <view class="lc-right">
-              <view class="lc-amount green">+¥{{ fmtAmt(item.commission) }}</view>
+              <view class="lc-amount green">+¥{{ fmtAmt(item.earnedCommission) }}</view>
             </view>
           </view>
           <!-- 分页 -->
@@ -215,7 +214,7 @@ function wayLabel(w) {
 
 function fmtAmt(v) {
   const n = Number(v) || 0
-  return n >= 10000 ? (n / 10000).toFixed(1) + 'w' : n.toFixed(2)
+  return n.toFixed(2)
 }
 
 function formatDate(dt) {
@@ -349,7 +348,6 @@ onMounted(async () => {
   }
 
   .header-title { font-size: 34rpx; font-weight: 600; }
-  .header-sub   { font-size: 24rpx; opacity: 0.7; margin-top: 4rpx; }
 }
 
 .scroll-area { flex: 1; height: 0; background: #f4f5f9; }

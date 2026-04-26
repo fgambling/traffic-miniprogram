@@ -122,7 +122,7 @@
               </view>
             </view>
             <view class="si-right">
-              <text class="si-commission">¥{{ fmtAmt(item.commission) }}</text>
+              <text class="si-commission">¥{{ fmtAmt(item.earnedCommission) }}</text>
               <text class="si-label">佣金</text>
             </view>
           </view>
