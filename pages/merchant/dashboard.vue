@@ -36,7 +36,15 @@
     </view>
 
     <!-- ===== 滚动内容 ===== -->
-    <scroll-view class="scroll-area" scroll-y enable-flex>
+    <scroll-view
+      class="scroll-area"
+      scroll-y
+      enable-flex
+      refresher-enabled
+      :refresher-triggered="isRefreshing"
+      @refresherrefresh="onPullRefresh"
+      @refresherrestore="isRefreshing = false"
+    >
 
       <!-- 高峰提醒滚动消息栏 -->
       <view v-if="peakMessage" class="peak-banner" @click="onPeakBannerClick">
@@ -51,7 +59,10 @@
       <view class="pad">
         <!-- 性别分布（纯HTML，不用canvas，弹层出现时不消失） -->
         <view class="mini-card">
-          <view class="mini-title">性别分布</view>
+          <view class="mini-title-row">
+            <text class="mini-title">性别分布</text>
+            <text class="mini-detail" @click="goTrend">详情 ›</text>
+          </view>
 
           <!-- 双色环形视觉 + tooltip（点击显示人数，再点关闭） -->
           <view class="gender-ring-area" @click="toggleGenderCount">
@@ -88,7 +99,10 @@
 
         <!-- 年龄 -->
         <view class="mini-card" style="margin-top: 20rpx;">
-          <view class="mini-title">年龄段</view>
+          <view class="mini-title-row">
+            <text class="mini-title">年龄段</text>
+            <text class="mini-detail" @click="goTrend">详情 ›</text>
+          </view>
           <view class="age-bars">
             <view v-for="(ag, i) in ageData" :key="ag.label" class="age-col" @click="onAgeClick(i)">
               <!-- tooltip 浮在柱体正上方，与客流趋势点击样式一致 -->
@@ -104,24 +118,6 @@
             </view>
           </view>
         </view>
-      </view>
-
-      <!-- 客流趋势柱状图 -->
-      <view class="card mx-pad">
-        <view class="card-header">
-          <text class="card-title">今日客流趋势</text>
-          <text class="card-more" @click="goTrend">详情 ›</text>
-        </view>
-        <UniChart
-          v-if="!anySheetOpen"
-          canvas-id="chart-dashboard"
-          type="bar"
-          :data="hourlyData"
-          :labels="hourlyLabels"
-          :height="280"
-          :peak-threshold="hourlyPeak"
-        />
-        <view v-else class="chart-placeholder" :style="{ height: '280rpx' }" />
       </view>
 
       <!-- 数据来源 -->
@@ -173,6 +169,8 @@ import BottomSheet from '../../components/BottomSheet.vue'
 import UniChart from '../../components/UniChart.vue'
 import { statusBarHeight } from '../../utils/system.js'
 import { get } from '../../utils/request.js'
+import { BASE_URL } from '../../utils/request.js'
+import { getToken } from '../../utils/auth.js'
 import { useUserStore } from '../../store/user.js'
 
 // ── 状态 ──────────────────────────────────────────────────────
@@ -306,6 +304,12 @@ async function fetchHourlyTrend() {
   }
 }
 
+async function onPullRefresh() {
+  isRefreshing.value = true
+  await fetchAll()
+  isRefreshing.value = false
+}
+
 async function fetchAll() {
   await Promise.all([fetchDashboard(), fetchHourlyTrend()])
 }
@@ -349,6 +353,7 @@ async function onPeakBannerClick() {
 }
 
 // ── 自动刷新 ─────────────────────────────────────────────────
+const isRefreshing = ref(false)
 let refreshTimer = null
 
 onMounted(() => {
@@ -359,6 +364,29 @@ onMounted(() => {
 onUnmounted(() => {
   if (refreshTimer) clearInterval(refreshTimer)
 })
+
+// ── 导出报表 ─────────────────────────────────────────────────
+function exportReport() {
+  uni.showLoading({ title: '生成报表中...', mask: true })
+  uni.downloadFile({
+    url: `${BASE_URL}/api/merchant/export/report`,
+    header: { Authorization: `Bearer ${getToken()}` },
+    success(res) {
+      if (res.statusCode === 200) {
+        uni.openDocument({
+          filePath: res.tempFilePath,
+          showMenu: true,
+          success() { uni.showToast({ title: '报表已生成', icon: 'success' }) },
+          fail()    { uni.showToast({ title: '请在文件管理中查看', icon: 'none' }) }
+        })
+      } else {
+        uni.showToast({ title: '导出失败', icon: 'none' })
+      }
+    },
+    fail() { uni.showToast({ title: '网络错误', icon: 'none' }) },
+    complete() { uni.hideLoading() }
+  })
+}
 
 // ── 操作 ─────────────────────────────────────────────────────
 function selectStore(s) {
@@ -412,7 +440,7 @@ function onAgeClick(i) {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding-right: 200rpx;
+    padding-right: 0;
     margin-bottom: 8rpx;
 
     .store-name {
@@ -423,6 +451,16 @@ function onAgeClick(i) {
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+
+    .nav-export {
+      font-size: 22rpx;
+      color: rgba(255,255,255,0.8);
+      background: rgba(255,255,255,0.15);
+      padding: 8rpx 20rpx;
+      border-radius: 24rpx;
+      flex-shrink: 0;
+      &:active { opacity: 0.6; }
     }
 
     .top-right-group {
@@ -562,11 +600,23 @@ function onAgeClick(i) {
   padding: 28rpx;
   box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.03);
 
+  .mini-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16rpx;
+  }
+
   .mini-title {
     font-size: 24rpx;
     font-weight: 600;
     color: #333;
-    margin-bottom: 16rpx;
+  }
+
+  .mini-detail {
+    font-size: 22rpx;
+    color: #1f4788;
+    &:active { opacity: 0.6; }
   }
 
   /* CSS 性别环形图 */

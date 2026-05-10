@@ -6,75 +6,77 @@
       <view class="nav-bar">
         <view class="header-title">我的</view>
       </view>
-      <view class="avatar-area">
+      <view class="profile-row">
         <view class="avatar">{{ avatarText }}</view>
-        <view class="user-info">
-          <text class="user-name">{{ storeName }}</text>
-          <text class="user-phone">{{ phone || '未绑定手机号' }}</text>
+        <view class="profile-info">
+          <view class="profile-name-row">
+            <text class="profile-name">{{ storeName }}</text>
+            <view class="pkg-badge" :class="pkgBadgeClass">{{ pkgName }}</view>
+          </view>
+          <text class="profile-phone">{{ phone || '未绑定手机号' }}</text>
         </view>
       </view>
     </view>
 
     <scroll-view class="scroll-area" scroll-y>
-      <!-- 套餐信息 -->
-      <view class="section-title">套餐信息</view>
-      <view class="pkg-card">
-        <view class="pkg-header">
-          <text class="pkg-name">{{ pkgName }}</text>
-          <view class="pkg-badge" :class="pkgBadgeClass">{{ pkgBadgeText }}</view>
+
+      <!-- 套餐条 -->
+      <view class="pkg-strip" @click="packageType < 3 && (showUpgradeSheet = true)">
+        <view class="ps-left">
+          <text class="ps-feature">{{ aiFeature }}</text>
+          <text class="ps-expire">有效期：{{ pkgExpire }}</text>
         </view>
-        <view class="pkg-rows">
-          <view class="pkg-row">
-            <text class="pkg-label">有效期至</text>
-            <text class="pkg-val">{{ pkgExpire }}</text>
-          </view>
-          <view class="pkg-row">
-            <text class="pkg-label">AI经营建议</text>
-            <text class="pkg-val">{{ aiFeature }}</text>
-          </view>
-        </view>
-        <button
-          v-if="packageType < 3"
-          class="pkg-upgrade-btn"
-          @click="showUpgradeSheet = true"
-        >升级</button>
-        <view v-else class="pkg-top-hint">已是最高版本</view>
+        <view v-if="packageType < 3" class="ps-upgrade-btn">升级套餐 ›</view>
+        <view v-else class="ps-top-tag">最高版本</view>
       </view>
 
-      <!-- 门店管理：仅多门店时展示 -->
-      <template v-if="hasMultiStore">
-        <view class="section-title">门店管理</view>
-        <view class="menu-card">
-          <view class="menu-row" @click="showStoreSheet = true">
-            <text class="menu-label">切换门店</text>
-            <text class="menu-val">{{ storeName }}</text>
-            <text class="menu-arrow">›</text>
-          </view>
-        </view>
-      </template>
-
-      <!-- 账号设置 -->
-      <view class="section-title">账号设置</view>
+      <!-- 统一菜单卡 -->
       <view class="menu-card">
+        <!-- 切换门店 -->
+        <view class="menu-row" @click="openStoreSheet">
+          <text class="menu-icon">🏪</text>
+          <text class="menu-label">切换门店</text>
+          <text class="menu-val">{{ storeName }}</text>
+          <text class="menu-arrow">›</text>
+        </view>
+
+        <!-- 门店信息 -->
+        <view class="menu-row" @click="goIfAdv('/pages/merchant/business-info')">
+          <text class="menu-icon">🍽️</text>
+          <text class="menu-label">门店信息</text>
+          <text class="menu-val">菜单 · 促销 · 客群</text>
+          <text class="menu-arrow">›</text>
+        </view>
+
+        <!-- 规则配置 -->
+        <view class="menu-row" @click="goIfMid('/pages/merchant/rules')">
+          <text class="menu-icon">⚙️</text>
+          <text class="menu-label">规则配置</text>
+          <text class="menu-arrow">›</text>
+        </view>
+
+        <view class="menu-divider" />
+
         <view class="menu-row" @click="showPhoneSheet = true">
-          <text class="menu-label">绑定手机号</text>
+          <text class="menu-icon">📱</text>
+          <text class="menu-label">手机号</text>
           <text class="menu-val">{{ phoneMasked }}</text>
           <text class="menu-arrow">›</text>
         </view>
         <view class="menu-row" @click="openPwdSheet">
+          <text class="menu-icon">🔒</text>
           <text class="menu-label">修改密码</text>
           <text class="menu-arrow">›</text>
         </view>
         <view class="menu-row" @click="showAbout">
+          <text class="menu-icon">ℹ️</text>
           <text class="menu-label">关于系统</text>
           <text class="menu-arrow">›</text>
         </view>
       </view>
 
       <!-- 退出登录 -->
-      <view class="logout-wrap">
-        <button class="btn-logout" @click="confirmLogout">退出登录</button>
-      </view>
+      <button class="btn-logout" @click="confirmLogout">退出登录</button>
 
       <view class="tab-spacer" />
     </scroll-view>
@@ -114,6 +116,7 @@
           </view>
           <text v-if="s.merchantId === currentStoreId" class="si-tag">当前</text>
         </view>
+        <view v-if="storeList.length <= 1" class="si-empty">该账号暂无其他门店</view>
       </view>
     </BottomSheet>
 
@@ -170,7 +173,7 @@
             </view>
             <view class="us-tier-features">
               <text class="us-feat">✓ 包含中级版全部功能</text>
-              <text class="us-feat">✓ AI 大模型个性化建议（即将上线）</text>
+              <text class="us-feat">✓ AI 大模型个性化建议</text>
               <text class="us-feat">✓ 历史同期对比分析</text>
               <text class="us-feat">✓ 报表导出</text>
             </view>
@@ -207,9 +210,9 @@ const pkgBadgeClass = computed(() => ['', 'badge-basic', 'badge-mid', 'badge-adv
 const pkgBadgeText  = computed(() => ['', '免费', '中级', '高级'][packageType.value] || '免费')
 const pkgExpire = computed(() => packageType.value === 1 ? '永久有效' : (expireDate.value || '--'))
 const aiFeature = computed(() => {
-  if (packageType.value === 1) return '3 次/天（规则建议）'
-  if (packageType.value === 2) return '无限次（规则建议）'
-  return '无限次（含大模型，即将上线）'
+  if (packageType.value === 1) return '不含 AI 建议'
+  if (packageType.value === 2) return 'AI 建议（规则引擎）'
+  return 'AI 建议（大模型）'
 })
 
 // ── 门店列表 ────────────────────────────────────────────────
@@ -226,7 +229,6 @@ const pwdForm          = ref({ old: '', next: '', confirm: '' })
 
 // ── 计算属性 ────────────────────────────────────────────────
 const avatarText  = computed(() => (storeName.value || '店')[0])
-const hasMultiStore = computed(() => storeList.value.length > 1)
 const phoneMasked = computed(() => {
   const p = phone.value
   if (!p || p.length < 11) return p || '未绑定'
@@ -271,18 +273,30 @@ onMounted(() => {
   fetchStores()
 })
 
-// ── 绑定手机号 ──────────────────────────────────────────────
-function savePhone() {
+// ── 绑定/修改手机号 ─────────────────────────────────────────
+async function savePhone() {
   const val = phoneInput.value.trim()
   if (!/^1\d{10}$/.test(val)) {
     uni.showToast({ title: '请输入正确的手机号', icon: 'none' }); return
   }
-  phone.value = val
-  showPhoneSheet.value = false
-  uni.showToast({ title: '绑定成功', icon: 'success' })
+  try {
+    await put('/api/merchant/phone', { phone: val })
+    phone.value      = val
+    storePhone.value = val
+    showPhoneSheet.value = false
+    uni.showToast({ title: '手机号已更新', icon: 'success' })
+    fetchStores()   // 手机号变了，门店分组随之变化，刷新列表
+  } catch (e) {
+    uni.showToast({ title: e.message || '修改失败', icon: 'none' })
+  }
 }
 
 // ── 切换门店 ────────────────────────────────────────────────
+function openStoreSheet() {
+  if (storeList.value.length === 0) fetchStores()
+  showStoreSheet.value = true
+}
+
 async function switchStore(store) {
   if (store.merchantId === currentStoreId.value) {
     showStoreSheet.value = false; return
@@ -343,6 +357,23 @@ async function submitPwd() {
   } catch (_) {}
 }
 
+// ── 套餐拦截跳转 ────────────────────────────────────────────
+function goIfMid(url) {
+  if (packageType.value >= 2) {
+    uni.navigateTo({ url })
+  } else {
+    uni.showToast({ title: '该功能仅限中级版及以上使用', icon: 'none', duration: 2000 })
+  }
+}
+
+function goIfAdv(url) {
+  if (packageType.value >= 3) {
+    uni.navigateTo({ url })
+  } else {
+    uni.showToast({ title: '该功能仅限高级版使用', icon: 'none', duration: 2000 })
+  }
+}
+
 // ── 关于 & 退出 ─────────────────────────────────────────────
 function showAbout() {
   uni.showModal({
@@ -377,17 +408,16 @@ function confirmLogout() {
   overflow: hidden;
 }
 
-/* Header */
+/* ── Header ── */
 .page-header {
   background: linear-gradient(135deg, #162d50, #1f4788);
-  padding: 0 40rpx 48rpx;
+  padding: 0 40rpx 40rpx;
   flex-shrink: 0;
 
   .nav-bar {
     height: 88rpx;
     display: flex;
     align-items: center;
-    margin-bottom: 16rpx;
   }
 
   .header-title {
@@ -395,199 +425,195 @@ function confirmLogout() {
     font-weight: 600;
     color: #fff;
   }
+}
 
-  .avatar-area {
-    display: flex;
-    align-items: center;
-    gap: 28rpx;
-  }
+.profile-row {
+  display: flex;
+  align-items: center;
+  gap: 24rpx;
 
   .avatar {
-    width: 112rpx;
-    height: 112rpx;
-    border-radius: 56rpx;
-    background: rgba(255, 255, 255, 0.2);
-    border: 3rpx solid rgba(255, 255, 255, 0.4);
+    width: 100rpx;
+    height: 100rpx;
+    border-radius: 50rpx;
+    background: rgba(255,255,255,0.2);
+    border: 2rpx solid rgba(255,255,255,0.35);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 52rpx;
+    font-size: 44rpx;
     color: #fff;
     font-weight: 700;
     flex-shrink: 0;
   }
 
-  .user-info {
-    .user-name {
-      display: block;
-      font-size: 36rpx;
-      font-weight: 700;
-      color: #fff;
-      margin-bottom: 8rpx;
-    }
+  .profile-info {
+    flex: 1;
+    min-width: 0;
+  }
 
-    .user-phone {
-      font-size: 24rpx;
-      color: rgba(255, 255, 255, 0.6);
-    }
+  .profile-name-row {
+    display: flex;
+    align-items: center;
+    gap: 12rpx;
+    margin-bottom: 8rpx;
+  }
+
+  .profile-name {
+    font-size: 34rpx;
+    font-weight: 700;
+    color: #fff;
+  }
+
+  .pkg-badge {
+    font-size: 18rpx;
+    padding: 4rpx 14rpx;
+    border-radius: 16rpx;
+    font-weight: 600;
+    flex-shrink: 0;
+    &.badge-basic    { background: rgba(255,255,255,0.2); color: rgba(255,255,255,0.85); }
+    &.badge-mid      { background: rgba(255,207,64,0.9);  color: #5a3700; }
+    &.badge-advanced { background: linear-gradient(135deg,#ff8a00,#e52e71); color: #fff; }
+  }
+
+  .profile-phone {
+    font-size: 24rpx;
+    color: rgba(255,255,255,0.55);
   }
 }
 
+/* ── Scroll ── */
 .scroll-area {
   flex: 1;
   height: 0;
   background: #f4f5f9;
 }
 
-.section-title {
-  font-size: 26rpx;
-  font-weight: 600;
-  color: #999;
-  padding: 32rpx 32rpx 12rpx;
-  letter-spacing: 1rpx;
-}
-
-/* 套餐卡片 */
-.pkg-card {
+/* ── 套餐条 ── */
+.pkg-strip {
+  margin: 24rpx 32rpx 0;
   background: #fff;
-  margin: 0 32rpx;
-  border-radius: 24rpx;
-  padding: 32rpx;
-  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
+  border-radius: 20rpx;
+  padding: 24rpx 28rpx;
+  display: flex;
+  align-items: center;
+  box-shadow: 0 2rpx 12rpx rgba(0,0,0,0.04);
 
-  .pkg-header {
-    display: flex;
-    align-items: center;
-    gap: 16rpx;
-    margin-bottom: 24rpx;
+  &:active { opacity: 0.85; }
 
-    .pkg-name {
-      font-size: 34rpx;
-      font-weight: 700;
-      color: #1a1a2e;
-    }
-
-    .pkg-badge {
-      font-size: 20rpx;
-      padding: 6rpx 16rpx;
-      border-radius: 20rpx;
-      font-weight: 600;
-    }
-
-    .badge-basic    { background: #f0f0f0; color: #999; }
-    .badge-mid      { background: rgba(255,207,64,0.9); color: #5a3700; }
-    .badge-advanced { background: linear-gradient(135deg,#ff8a00,#e52e71); color: #fff; }
+  .ps-left {
+    flex: 1;
+    min-width: 0;
   }
 
-  .pkg-rows {
-    margin-bottom: 24rpx;
-  }
-
-  .pkg-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 14rpx 0;
-
-    .pkg-label {
-      font-size: 26rpx;
-      color: #999;
-    }
-
-    .pkg-val {
-      font-size: 26rpx;
-      color: #1a1a2e;
-      font-weight: 500;
-    }
-  }
-
-  .pkg-upgrade-btn {
-    width: 100%;
-    height: 80rpx;
-    border-radius: 20rpx;
-    background: linear-gradient(135deg, #1a4a8a, #2d6fd6);
-    color: #fff;
+  .ps-feature {
+    display: block;
     font-size: 26rpx;
-    font-weight: 600;
-    border: none;
-    line-height: 80rpx;
-    padding: 0;
+    color: #1a1a2e;
+    font-weight: 500;
+    margin-bottom: 6rpx;
   }
 
-  .pkg-top-hint {
-    text-align: center;
+  .ps-expire {
+    font-size: 22rpx;
+    color: #aaa;
+  }
+
+  .ps-upgrade-btn {
     font-size: 24rpx;
-    color: #bbb;
-    padding: 16rpx 0 4rpx;
-  }
-}
-
-/* 菜单卡 */
-.menu-card {
-  background: #fff;
-  margin: 0 32rpx;
-  border-radius: 24rpx;
-  padding: 0 32rpx;
-  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
-
-  .menu-row {
-    display: flex;
-    align-items: center;
-    padding: 28rpx 0;
-    border-bottom: 1rpx solid #f0f0f0;
-
-    &:last-child { border-bottom: none; }
-    &:active { opacity: 0.7; }
-
-    .menu-label {
-      font-size: 28rpx;
-      color: #1a1a2e;
-      flex-shrink: 0;
-    }
-
-    .menu-val {
-      flex: 1;
-      text-align: right;
-      font-size: 26rpx;
-      color: #999;
-      margin-right: 8rpx;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .menu-arrow {
-      font-size: 32rpx;
-      color: #ccc;
-      flex-shrink: 0;
-    }
-  }
-}
-
-/* 退出 */
-.logout-wrap {
-  padding: 48rpx 32rpx 0;
-
-  .btn-logout {
-    width: 100%;
-    height: 96rpx;
-    border-radius: 24rpx;
-    background: #fff;
-    color: #c62828;
-    font-size: 30rpx;
+    color: #1f4788;
     font-weight: 600;
-    border: 1rpx solid #fde0e0;
-    line-height: 96rpx;
-    box-sizing: border-box;
-    padding: 0;
+    flex-shrink: 0;
   }
+
+  .ps-top-tag {
+    font-size: 22rpx;
+    color: #bbb;
+    flex-shrink: 0;
+  }
+}
+
+/* ── 菜单卡 ── */
+.menu-card {
+  margin: 16rpx 32rpx 0;
+  background: #fff;
+  border-radius: 20rpx;
+  padding: 0 28rpx;
+  box-shadow: 0 2rpx 12rpx rgba(0,0,0,0.04);
+  overflow: hidden;
+}
+
+.menu-row {
+  display: flex;
+  align-items: center;
+  padding: 30rpx 0;
+  border-bottom: 1rpx solid #f5f5f5;
+
+  &:last-child { border-bottom: none; }
+  &:active { background: #f9f9f9; margin: 0 -28rpx; padding: 30rpx 28rpx; }
+
+  .menu-icon {
+    font-size: 32rpx;
+    margin-right: 18rpx;
+    flex-shrink: 0;
+    width: 40rpx;
+    text-align: center;
+  }
+
+  .menu-label {
+    font-size: 28rpx;
+    color: #1a1a2e;
+    flex: 1;
+  }
+
+  .menu-val {
+    font-size: 26rpx;
+    color: #bbb;
+    margin-right: 8rpx;
+    max-width: 240rpx;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .menu-arrow {
+    font-size: 30rpx;
+    color: #d0d0d0;
+    flex-shrink: 0;
+  }
+}
+
+.menu-divider {
+  height: 1rpx;
+  background: #ebebeb;
+  margin: 0 -28rpx;
+}
+
+/* ── 退出 ── */
+.btn-logout {
+  display: block;
+  margin: 24rpx 32rpx 0;
+  width: calc(100% - 64rpx);
+  height: 96rpx;
+  border-radius: 20rpx;
+  background: #fff;
+  color: #c62828;
+  font-size: 28rpx;
+  font-weight: 600;
+  border: 1rpx solid #fde0e0;
+  line-height: 96rpx;
+  box-sizing: border-box;
+  padding: 0;
+  box-shadow: 0 2rpx 12rpx rgba(0,0,0,0.04);
+
+  &::after { display: none; }
 }
 
 .tab-spacer {
   height: calc(96rpx + env(safe-area-inset-bottom) + 32rpx);
 }
 
-/* 弹层表单 */
+/* ── 弹层表单 ── */
 .form {
   .form-row {
     display: flex;
@@ -595,13 +621,13 @@ function confirmLogout() {
     background: #f6f7fa;
     border-radius: 16rpx;
     padding: 24rpx;
-    margin-bottom: 24rpx;
+    margin-bottom: 20rpx;
 
     .form-label {
       font-size: 26rpx;
       color: #666;
       flex-shrink: 0;
-      margin-right: 16rpx;
+      width: 120rpx;
     }
 
     .form-input {
@@ -623,77 +649,56 @@ function confirmLogout() {
   border: none;
   line-height: 96rpx;
   padding: 0;
+
+  &::after { display: none; }
 }
 
-/* 门店列表 */
+/* ── 门店列表 ── */
 .store-list {
   .store-item {
     display: flex;
     align-items: center;
-    padding: 28rpx 24rpx;
+    padding: 24rpx;
     border-radius: 16rpx;
     margin-bottom: 12rpx;
     background: #f6f7fa;
 
-    &.active {
-      background: #e4edfa;
-      border: 1rpx solid #1f4788;
-    }
-
+    &.active { background: #e4edfa; border: 1rpx solid #1f4788; }
     &:active { opacity: 0.8; }
 
-    .si-info {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      gap: 6rpx;
-    }
-
-    .si-name {
-      font-size: 28rpx;
-      color: #1a1a2e;
-      font-weight: 500;
-    }
-
-    .si-addr {
-      font-size: 22rpx;
-      color: #999;
-    }
+    .si-info { flex: 1; display: flex; flex-direction: column; gap: 6rpx; }
+    .si-name { font-size: 28rpx; color: #1a1a2e; font-weight: 500; }
+    .si-addr { font-size: 22rpx; color: #999; }
 
     .si-tag {
       font-size: 20rpx;
       color: #1f4788;
-      background: rgba(31, 71, 136, 0.15);
+      background: rgba(31,71,136,0.12);
       padding: 4rpx 14rpx;
       border-radius: 16rpx;
       font-weight: 600;
       flex-shrink: 0;
     }
   }
+
+  .si-empty {
+    text-align: center;
+    font-size: 26rpx;
+    color: #ccc;
+    padding: 32rpx 0;
+  }
 }
 
-.empty-hint {
-  text-align: center;
-  padding: 60rpx 0;
-  font-size: 26rpx;
-  color: #ccc;
-}
-
-/* 升级弹层 */
-.upgrade-sheet {
-  padding-bottom: 8rpx;
-}
+/* ── 升级弹层 ── */
+.upgrade-sheet { padding-bottom: 8rpx; }
 
 .us-current {
   display: flex;
   align-items: center;
-  gap: 18rpx;
-  margin-bottom: 32rpx;
+  gap: 14rpx;
+  margin-bottom: 28rpx;
 
-  .us-cur-label {
-    font-size: 26rpx;
-    color: #999;
-  }
+  .us-cur-label { font-size: 26rpx; color: #999; }
 
   .us-cur-badge {
     font-size: 22rpx;
@@ -706,27 +711,20 @@ function confirmLogout() {
   }
 }
 
-.us-options {
-  display: flex;
-  flex-direction: column;
-  gap: 20rpx;
-}
+.us-options { display: flex; flex-direction: column; gap: 16rpx; }
 
 .us-tier-card {
   border-radius: 20rpx;
   border: 2rpx solid #e0e7f4;
-  padding: 28rpx;
+  padding: 24rpx;
 
-  &--advanced {
-    border-color: rgba(229,46,113,0.3);
-    background: rgba(255,250,245,1);
-  }
+  &--advanced { border-color: rgba(229,46,113,0.25); background: #fffaf8; }
 
   .us-tier-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 18rpx;
+    margin-bottom: 16rpx;
   }
 
   .us-tier-badge {
@@ -738,24 +736,10 @@ function confirmLogout() {
     &.badge-advanced { background: linear-gradient(135deg,#ff8a00,#e52e71); color: #fff; }
   }
 
-  .us-tier-price {
-    font-size: 30rpx;
-    font-weight: 700;
-    color: #1a1a2e;
-  }
+  .us-tier-price { font-size: 30rpx; font-weight: 700; color: #1a1a2e; }
 
-  .us-tier-features {
-    margin-bottom: 24rpx;
-    display: flex;
-    flex-direction: column;
-    gap: 10rpx;
-  }
-
-  .us-feat {
-    font-size: 24rpx;
-    color: #555;
-    line-height: 1.5;
-  }
+  .us-tier-features { margin-bottom: 20rpx; display: flex; flex-direction: column; gap: 10rpx; }
+  .us-feat { font-size: 24rpx; color: #555; line-height: 1.5; }
 }
 
 .us-btn {
@@ -770,8 +754,7 @@ function confirmLogout() {
   background: linear-gradient(135deg, #1a4a8a, #2d6fd6);
   color: #fff;
 
-  &--advanced {
-    background: linear-gradient(135deg, #ff8a00, #e52e71);
-  }
+  &--advanced { background: linear-gradient(135deg, #ff8a00, #e52e71); }
+  &::after { display: none; }
 }
 </style>

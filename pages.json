@@ -38,6 +38,12 @@
       }
     },
     {
+      "path": "pages/merchant/business-info",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
       "path": "pages/salesman/dashboard",
       "style": {
         "navigationStyle": "custom"

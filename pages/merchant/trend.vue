@@ -2,8 +2,9 @@
   <view class="page">
     <view class="page-header">
       <view :style="{ height: statusBarHeight + 'px' }" />
-      <view class="nav-bar">
+      <view class="nav-bar" :style="navBarStyle">
         <view class="header-title">客流趋势</view>
+        <view class="nav-export-btn" @click="onExportClick">导出</view>
       </view>
     </view>
 
@@ -36,8 +37,8 @@
           <picker mode="date" :value="dateEnd" :start="dateStart" :end="todayStr" @change="onDayEndChange">
             <view class="date-btn">{{ dateEnd }}</view>
           </picker>
-          <text class="date-range-tag" :class="{ 'tag-warn': dayCount >= 15 }">{{ dayCount }}天</text>
-          <text class="date-limit-tip">最多15天</text>
+          <text class="date-range-tag" :class="{ 'tag-warn': dayCount >= maxDays }">{{ dayCount }}天</text>
+          <text class="date-limit-tip">最多{{ maxDays }}天</text>
         </template>
         <!-- 周/月Tab：固定范围，只显示说明 -->
         <template v-else>
@@ -63,26 +64,30 @@
 
       <!-- ②③⑤ 折线图卡片 -->
       <view class="chart-card">
-        <!-- 卡片头：标题 + 对比切换（小时/日支持对比） -->
+        <!-- 卡片头：标题 + 对比同期（小时视图） -->
         <view class="chart-card-header">
           <text class="chart-card-title">客流折线图</text>
-          <view
-            v-if="activeTab < 2"
-            class="compare-toggle"
-            :class="{ active: showCompare }"
-            @click="toggleCompare"
-          >
-            <text>{{ showCompare ? '✓ ' : '' }}{{ compareLabel }}</text>
+          <view v-if="activeTab === 0" class="compare-area">
+            <picker
+              mode="date"
+              :value="compareDate"
+              @change="onCompareDateChange"
+            >
+              <view class="compare-toggle" :class="{ active: showCompare }">
+                <text>{{ showCompare ? compareDate : '对比同期' }}</text>
+              </view>
+            </picker>
+            <text v-if="showCompare" class="compare-close" @click.stop="closeCompare">✕</text>
           </view>
         </view>
 
         <!-- ② 对比图例 -->
         <view v-if="showCompare && compareChartData.length" class="compare-legend">
           <view class="cl-item">
-            <view class="cl-line main-line" /><text>本期</text>
+            <view class="cl-line main-line" /><text>{{ selectedDate }}</text>
           </view>
           <view class="cl-item">
-            <view class="cl-line compare-line" /><text>{{ compareLabel }}</text>
+            <view class="cl-line compare-line" /><text>{{ compareDate }}</text>
           </view>
         </view>
 
@@ -165,28 +170,60 @@
           </view>
 
           <!-- 上衣类型 -->
-          <view class="ps-section-label">穿着风格（上衣）</view>
-          <view class="attr-rows">
-            <view v-for="attr in upperData" :key="attr.label" class="attr-row">
-              <text class="ar-label">{{ attr.label }}</text>
-              <view class="ar-bar-bg">
-                <view class="ar-bar-fill" :style="{ width: attr.pct + '%', background: attr.color }" />
+          <template v-if="upperData.some(a => a.pct > 0)">
+            <view class="ps-section-label">上衣类型</view>
+            <view class="attr-rows">
+              <view v-for="attr in upperData" :key="attr.label" class="attr-row">
+                <text class="ar-label">{{ attr.label }}</text>
+                <view class="ar-bar-bg">
+                  <view class="ar-bar-fill" :style="{ width: attr.pct + '%', background: attr.color }" />
+                </view>
+                <text class="ar-pct">{{ attr.pct }}%</text>
               </view>
-              <text class="ar-pct">{{ attr.pct }}%</text>
             </view>
-          </view>
+          </template>
+
+          <!-- 上衣风格 -->
+          <template v-if="upperStyleData.some(a => a.pct > 0)">
+            <view class="ps-section-label">上衣风格</view>
+            <view class="attr-rows">
+              <view v-for="attr in upperStyleData" :key="attr.label" class="attr-row">
+                <text class="ar-label">{{ attr.label }}</text>
+                <view class="ar-bar-bg">
+                  <view class="ar-bar-fill" :style="{ width: attr.pct + '%', background: attr.color }" />
+                </view>
+                <text class="ar-pct">{{ attr.pct }}%</text>
+              </view>
+            </view>
+          </template>
 
           <!-- 下装类型 -->
-          <view class="ps-section-label">下装类型</view>
-          <view class="attr-rows">
-            <view v-for="attr in lowerData" :key="attr.label" class="attr-row">
-              <text class="ar-label">{{ attr.label }}</text>
-              <view class="ar-bar-bg">
-                <view class="ar-bar-fill" :style="{ width: attr.pct + '%', background: attr.color }" />
+          <template v-if="lowerData.some(a => a.pct > 0)">
+            <view class="ps-section-label">下装类型</view>
+            <view class="attr-rows">
+              <view v-for="attr in lowerData" :key="attr.label" class="attr-row">
+                <text class="ar-label">{{ attr.label }}</text>
+                <view class="ar-bar-bg">
+                  <view class="ar-bar-fill" :style="{ width: attr.pct + '%', background: attr.color }" />
+                </view>
+                <text class="ar-pct">{{ attr.pct }}%</text>
               </view>
-              <text class="ar-pct">{{ attr.pct }}%</text>
             </view>
-          </view>
+          </template>
+
+          <!-- 下装风格 -->
+          <template v-if="lowerStyleData.some(a => a.pct > 0)">
+            <view class="ps-section-label">下装风格</view>
+            <view class="attr-rows">
+              <view v-for="attr in lowerStyleData" :key="attr.label" class="attr-row">
+                <text class="ar-label">{{ attr.label }}</text>
+                <view class="ar-bar-bg">
+                  <view class="ar-bar-fill" :style="{ width: attr.pct + '%', background: attr.color }" />
+                </view>
+                <text class="ar-pct">{{ attr.pct }}%</text>
+              </view>
+            </view>
+          </template>
 
           <!-- 配饰 & 随身物品 -->
           <template v-if="accessoryData.length">
@@ -265,6 +302,32 @@
       <view class="tab-spacer" />
     </scroll-view>
 
+    <!-- 导出 BottomSheet -->
+    <view v-if="showExportSheet" class="sheet-mask" @click="showExportSheet = false">
+      <view class="export-sheet" @click.stop>
+        <view class="es-title">导出数据</view>
+
+        <view class="es-label">导出内容</view>
+        <view class="es-opts">
+          <view class="es-opt" :class="{ selected: exportScope === 'trend' }" @click="exportScope = 'trend'">客流折线图</view>
+          <template v-if="selectedIdx !== null">
+            <view class="es-opt" :class="{ selected: exportScope === 'profile' }" @click="exportScope = 'profile'">客群画像</view>
+            <view class="es-opt" :class="{ selected: exportScope === 'both' }" @click="exportScope = 'both'">全部</view>
+          </template>
+        </view>
+
+        <view class="es-label">文件格式</view>
+        <view class="es-opts">
+          <view class="es-opt" :class="{ selected: exportFormat === 'excel' }" @click="exportFormat = 'excel'">Excel</view>
+          <view class="es-opt" :class="{ selected: exportFormat === 'pdf' }" @click="exportFormat = 'pdf'">PDF</view>
+        </view>
+
+        <button class="es-btn" :disabled="exporting" @click="doExport">
+          {{ exporting ? '正在导出…' : '确认导出' }}
+        </button>
+      </view>
+    </view>
+
     <TabBar role="merchant" :current="1" />
   </view>
 </template>
@@ -274,7 +337,8 @@ import { ref, computed, onMounted } from 'vue'
 import TabBar from '../../components/TabBar.vue'
 import UniChart from '../../components/UniChart.vue'
 import { statusBarHeight } from '../../utils/system.js'
-import { get } from '../../utils/request.js'
+import { get, BASE_URL } from '../../utils/request.js'
+import { getToken } from '../../utils/auth.js'
 
 // ── 日期工具 ─────────────────────────────────────────────────
 function toISO(d) {
@@ -294,6 +358,9 @@ const tabs = [
 ]
 
 // ── 状态 ──────────────────────────────────────────────────────
+const packageType = ref(1)
+const maxDays     = computed(() => ({ 1: 15, 2: 31, 3: 90 }[packageType.value] || 15))
+
 const activeTab        = ref(0)
 const loading          = ref(false)
 const trendPoints      = ref([])
@@ -307,11 +374,19 @@ const dateEnd      = ref(todayStr)       // 日Tab：结束
 const showCompare    = ref(false)
 const comparePoints  = ref([])
 const compareLoading = ref(false)
+const compareDate = ref(nDaysAgo(1))   // 选中的对比日期，默认昨日
 
 // 画像状态
 const selectedIdx     = ref(null)
 const profileLoading  = ref(false)
 const selectedProfile = ref(null)
+
+// 导出
+const navBarStyle     = ref({})
+const showExportSheet = ref(false)
+const exportFormat    = ref('excel')
+const exportScope     = ref('trend')
+const exporting       = ref(false)
 
 // 停留时长分析状态
 const stayLoading   = ref(false)
@@ -325,11 +400,6 @@ const dayCount = computed(() => {
   return Math.round(ms / 86400000) + 1
 })
 
-// ── 对比标签 ─────────────────────────────────────────────────
-const compareLabel = computed(() => {
-  const map = { hour: '对比昨日', day: '对比上期' }
-  return map[tabs[activeTab.value].type] || '历史对比'
-})
 
 // ── 数据加载 ─────────────────────────────────────────────────
 async function loadTrend() {
@@ -374,7 +444,20 @@ function switchTab(i) {
   loadTrend()
 }
 
-onMounted(loadTrend)
+onMounted(async () => {
+  try {
+    const rect = uni.getMenuButtonBoundingClientRect()
+    const sys  = uni.getSystemInfoSync()
+    // reserve the space the WeChat capsule occupies on the right
+    const rightPx = sys.screenWidth - rect.left + 8
+    navBarStyle.value = { paddingRight: rightPx + 'px' }
+  } catch (_) {}
+  try {
+    const d = await get('/api/merchant/dashboard', {}, { showLoad: false })
+    if (d?.packageType) packageType.value = d.packageType
+  } catch (_) {}
+  loadTrend()
+})
 
 // ④ 日期选择事件
 function onHourDateChange(e) {
@@ -386,8 +469,8 @@ function onDayStartChange(e) {
   const newStart = e.detail.value
   const d1 = new Date(newStart)
   const d2 = new Date(dateEnd.value)
-  if ((d2 - d1) / 86400000 > 14) {
-    uni.showToast({ title: '日期范围最多15天', icon: 'none', duration: 2000 })
+  if ((d2 - d1) / 86400000 >= maxDays.value) {
+    uni.showToast({ title: `最多可选 ${maxDays.value} 天`, icon: 'none', duration: 2000 })
     return
   }
   dateStart.value = newStart
@@ -398,8 +481,8 @@ function onDayEndChange(e) {
   const newEnd = e.detail.value
   const d1 = new Date(dateStart.value)
   const d2 = new Date(newEnd)
-  if ((d2 - d1) / 86400000 > 14) {
-    uni.showToast({ title: '日期范围最多15天', icon: 'none', duration: 2000 })
+  if ((d2 - d1) / 86400000 >= maxDays.value) {
+    uni.showToast({ title: `最多可选 ${maxDays.value} 天`, icon: 'none', duration: 2000 })
     return
   }
   dateEnd.value = newEnd
@@ -407,11 +490,28 @@ function onDayEndChange(e) {
 }
 
 // ② 对比线逻辑
-function toggleCompare() {
-  showCompare.value = !showCompare.value
-  if (showCompare.value && comparePoints.value.length === 0) {
-    fetchCompare()
+function onCompareDateChange(e) {
+  const picked = e.detail.value
+  const today     = new Date(); today.setHours(0, 0, 0, 0)
+  const pickedDay = new Date(picked)
+  const diffDays  = Math.round((today - pickedDay) / 86400000)
+
+  if (diffDays <= 0) {
+    uni.showToast({ title: '不能选择今天或未来日期', icon: 'none' }); return
   }
+  if (diffDays > maxDays.value) {
+    uni.showToast({ title: `当前套餐最多可对比 ${maxDays.value} 天前的数据`, icon: 'none', duration: 2500 }); return
+  }
+
+  compareDate.value   = picked
+  showCompare.value   = true
+  comparePoints.value = []
+  fetchCompare()
+}
+
+function closeCompare() {
+  showCompare.value   = false
+  comparePoints.value = []
 }
 
 async function fetchCompare() {
@@ -419,9 +519,7 @@ async function fetchCompare() {
   let params = null
 
   if (type === 'hour') {
-    // 昨日同小时
-    const d = new Date(selectedDate.value); d.setDate(d.getDate() - 1)
-    params = { type: 'hour', start: toISO(d), end: toISO(d) }
+    params = { type: 'hour', start: compareDate.value, end: compareDate.value }
   } else if (type === 'day') {
     // 上一个同等长度区间
     const n = dayCount.value
@@ -443,28 +541,39 @@ async function fetchCompare() {
 }
 
 // 将对比数据对齐到主数据的时间槽
+// ── 小时视图：合并两天时间轴，短的用 null 补位 ────────────────
+const unifiedHourSlots = computed(() => {
+  if (!showCompare.value || tabs[activeTab.value].type !== 'hour') return null
+  const mainByHour = {}
+  trendPoints.value.forEach(p => {
+    const h = parseInt((p.timeLabel || '').split(' ')[1]?.split(':')[0] ?? '0')
+    mainByHour[h] = p.enterCount
+  })
+  const compByHour = {}
+  comparePoints.value.forEach(p => {
+    const h = parseInt((p.timeLabel || '').split(' ')[1]?.split(':')[0] ?? '0')
+    compByHour[h] = p.enterCount
+  })
+  const allHours = [...new Set([
+    ...Object.keys(mainByHour).map(Number),
+    ...Object.keys(compByHour).map(Number)
+  ])].sort((a, b) => a - b)
+  return allHours.map(h => ({
+    label: String(h).padStart(2, '0'),
+    main: mainByHour[h] ?? null,
+    comp: compByHour[h] ?? null
+  }))
+})
+
 const compareChartData = computed(() => {
+  if (unifiedHourSlots.value) return unifiedHourSlots.value.map(s => s.comp)
+
   const main = trendPoints.value
   const comp = comparePoints.value
   if (!main.length || !comp.length) return []
 
-  const type = tabs[activeTab.value].type
-
-  if (type === 'hour') {
-    // 按小时编号对齐
-    const byHour = {}
-    comp.forEach(p => {
-      const h = parseInt((p.timeLabel || '').split(' ')[1]?.split(':')[0] ?? '0')
-      byHour[h] = p.enterCount
-    })
-    return main.map(p => {
-      const h = parseInt((p.timeLabel || '').split(' ')[1]?.split(':')[0] ?? '0')
-      return byHour[h] ?? 0
-    })
-  }
-
-  // 日/周/月：按位置对齐（上期 vs 本期同位置）
-  return main.map((_, i) => comp[i]?.enterCount ?? 0)
+  // 日/周/月：按位置对齐，缺失用 null
+  return main.map((_, i) => comp[i]?.enterCount ?? null)
 })
 
 // ── 时间标签格式化 ────────────────────────────────────────────
@@ -489,8 +598,16 @@ function formatLabel(label) {
 }
 
 // ── 图表数据 ─────────────────────────────────────────────────
-const chartData   = computed(() => trendPoints.value.map(p => p.enterCount))
-const chartLabels = computed(() => trendPoints.value.map(p => formatLabel(p.timeLabel)))
+const chartData   = computed(() =>
+  unifiedHourSlots.value
+    ? unifiedHourSlots.value.map(s => s.main)
+    : trendPoints.value.map(p => p.enterCount)
+)
+const chartLabels = computed(() =>
+  unifiedHourSlots.value
+    ? unifiedHourSlots.value.map(s => s.label)
+    : trendPoints.value.map(p => formatLabel(p.timeLabel))
+)
 
 const chartTitle = computed(() => {
   const map = {
@@ -648,7 +765,19 @@ const upperData = computed(() => {
     { label: '短袖',   pct: pct(d.upperShort, total), color: '#2d6fd6' },
     { label: '长袖',   pct: pct(d.upperLong,  total), color: '#17794a' },
     { label: '长外套', pct: pct(d.upperCoat,  total), color: '#e8842a' }
-  ]
+  ].filter(a => a.pct > 0)
+})
+
+const upperStyleData = computed(() => {
+  const d = selectedProfile.value
+  if (!d) return []
+  const total = d.totalEnter || 1
+  return [
+    { label: '条纹',   pct: pct(d.upperStyleStripe, total), color: '#5c6bc0' },
+    { label: 'Logo款', pct: pct(d.upperStyleLogo,   total), color: '#0288d1' },
+    { label: '格子',   pct: pct(d.upperStylePlaid,  total), color: '#00796b' },
+    { label: '拼接',   pct: pct(d.upperStyleSplice, total), color: '#7b1fa2' }
+  ].filter(a => a.pct > 0)
 })
 
 const lowerData = computed(() => {
@@ -659,7 +788,17 @@ const lowerData = computed(() => {
     { label: '长裤', pct: pct(d.lowerTrousers, total), color: '#37474f' },
     { label: '短裤', pct: pct(d.lowerShorts,   total), color: '#00838f' },
     { label: '裙子', pct: pct(d.lowerSkirt,    total), color: '#d64a7a' }
-  ]
+  ].filter(a => a.pct > 0)
+})
+
+const lowerStyleData = computed(() => {
+  const d = selectedProfile.value
+  if (!d) return []
+  const total = d.totalEnter || 1
+  return [
+    { label: '条纹', pct: pct(d.lowerStyleStripe,  total), color: '#e65100' },
+    { label: '图案', pct: pct(d.lowerStylePattern,  total), color: '#6d4c41' }
+  ].filter(a => a.pct > 0)
 })
 
 const accessoryData = computed(() => {
@@ -765,6 +904,59 @@ function buildStayParams(idx) {
   }
 }
 
+// ── 导出 ─────────────────────────────────────────────────────
+function onExportClick() {
+  if (packageType.value < 2) {
+    uni.showToast({ title: '该功能仅限中级以上用户', icon: 'none', duration: 2500 })
+    return
+  }
+  exportScope.value  = selectedIdx.value !== null ? 'both' : 'trend'
+  exportFormat.value = 'excel'
+  showExportSheet.value = true
+}
+
+async function doExport() {
+  exporting.value = true
+  try {
+    const type = tabs[activeTab.value].type
+    const p = { format: exportFormat.value, scope: exportScope.value, type }
+
+    if (type === 'hour')      { p.start = selectedDate.value; p.end = selectedDate.value }
+    else if (type === 'day')  { p.start = dateStart.value;    p.end = dateEnd.value }
+
+    if (exportScope.value !== 'trend' && selectedIdx.value !== null) {
+      const pp = buildProfileParams(selectedIdx.value)
+      if (pp) {
+        if (pp.startDt) { p.profileStartDt = pp.startDt; p.profileEndDt = pp.endDt }
+        if (pp.start)   { p.profileStart   = pp.start;   p.profileEnd   = pp.end }
+      }
+    }
+
+    const qs    = Object.entries(p).filter(([, v]) => v != null).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&')
+    const token = getToken()
+
+    const res = await new Promise((resolve, reject) => {
+      uni.downloadFile({
+        url: `${BASE_URL}/api/merchant/export/trend?${qs}`,
+        header: { Authorization: `Bearer ${token}` },
+        success: resolve,
+        fail:    reject
+      })
+    })
+
+    if (res.statusCode === 200) {
+      uni.openDocument({ filePath: res.tempFilePath, showMenu: true })
+      showExportSheet.value = false
+    } else {
+      uni.showToast({ title: '导出失败', icon: 'none' })
+    }
+  } catch (_) {
+    uni.showToast({ title: '导出失败，请重试', icon: 'none' })
+  } finally {
+    exporting.value = false
+  }
+}
+
 async function loadStayAnalysis(idx) {
   // 月 Tab 不显示停留分析，跳过请求
   if (activeTab.value === 3) { stayData.value = null; return }
@@ -806,6 +998,94 @@ async function loadStayAnalysis(idx) {
   .header-title {
     font-size: 34rpx;
     font-weight: 600;
+    flex: 1;
+  }
+
+  .nav-export-btn {
+    height: 56rpx;
+    line-height: 56rpx;
+    padding: 0 28rpx;
+    border: 1rpx solid rgba(255, 255, 255, 0.5);
+    border-radius: 28rpx;
+    font-size: 24rpx;
+    color: #fff;
+
+    &:active { opacity: 0.7; }
+  }
+}
+
+/* ── 导出 BottomSheet ── */
+.sheet-mask {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 200;
+  display: flex;
+  align-items: flex-end;
+}
+
+.export-sheet {
+  width: 100%;
+  background: #fff;
+  border-radius: 28rpx 28rpx 0 0;
+  padding: 40rpx 40rpx calc(40rpx + env(safe-area-inset-bottom));
+
+  .es-title {
+    font-size: 32rpx;
+    font-weight: 700;
+    color: #1a1a2e;
+    text-align: center;
+    margin-bottom: 36rpx;
+  }
+
+  .es-label {
+    font-size: 24rpx;
+    color: #999;
+    margin-bottom: 16rpx;
+    margin-top: 28rpx;
+  }
+
+  .es-opts {
+    display: flex;
+    gap: 16rpx;
+  }
+
+  .es-opt {
+    flex: 1;
+    height: 72rpx;
+    line-height: 72rpx;
+    text-align: center;
+    border: 2rpx solid #e0e6f0;
+    border-radius: 16rpx;
+    font-size: 26rpx;
+    color: #666;
+    background: #f8f9fc;
+
+    &.selected {
+      border-color: #1f4788;
+      color: #1f4788;
+      background: rgba(31, 71, 136, 0.07);
+      font-weight: 600;
+    }
+
+    &:active { opacity: 0.75; }
+  }
+
+  .es-btn {
+    display: block;
+    margin-top: 40rpx;
+    width: 100%;
+    height: 88rpx;
+    line-height: 88rpx;
+    background: linear-gradient(90deg, #1f4788, #2d6fd6);
+    color: #fff;
+    border-radius: 44rpx;
+    font-size: 30rpx;
+    font-weight: 600;
+    border: none;
+    text-align: center;
+
+    &[disabled] { opacity: 0.5; }
   }
 }
 
@@ -948,6 +1228,19 @@ async function loadStayAnalysis(idx) {
 }
 
 /* ② 对比切换按钮 */
+.compare-area {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.compare-close {
+  font-size: 24rpx;
+  color: #999;
+  padding: 4rpx 8rpx;
+  &:active { opacity: 0.6; }
+}
+
 .compare-toggle {
   height: 48rpx;
   line-height: 48rpx;

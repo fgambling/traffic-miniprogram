@@ -17,6 +17,7 @@
         class="chart-canvas"
         :style="`width: ${canvasW}px; height: ${canvasH}px; display: block;`"
         @touchstart="onTouchStart"
+        @touchmove="onTouchMove"
         @touchend="onTouchEnd"
       />
     </scroll-view>
@@ -27,6 +28,7 @@
       class="chart-canvas"
       :style="`width: ${canvasW}px; height: ${canvasH}px;`"
       @touchstart="onTouchStart"
+      @touchmove="onTouchMove"
       @touchend="onTouchEnd"
     />
   </view>
@@ -135,6 +137,29 @@ function onTouchStart(e) {
   }
 }
 
+function onTouchMove(e) {
+  if (!props.data.length) return
+  const touch = e.touches[0]
+  if (!touch) return
+  const x = touch.x
+
+  if (props.type === 'bar') {
+    const colW = canvasW.value / props.data.length
+    const idx = Math.floor(x / colW)
+    if (idx >= 0 && idx < props.data.length) {
+      scheduleDraw(idx, 0)
+      emit('barTouch', idx)
+    }
+  } else if (props.type === 'line') {
+    const n = props.data.length
+    if (n === 0) return
+    const stepX = n > 1 ? (canvasW.value - 8) / (n - 1) : canvasW.value
+    const idx = Math.max(0, Math.min(n - 1, Math.round((x - 4) / stepX)))
+    scheduleDraw(idx, 0)
+    emit('lineTouch', idx)
+  }
+}
+
 function onTouchEnd() {
   if (props.type === 'bar') {
     scheduleDraw(-1, 0)
@@ -162,7 +187,8 @@ function draw(hoveredIdx = -1) {
 
   const LABEL_H = 18
   const DRAW_H = h - LABEL_H
-  const maxVal = Math.max(...props.data, ...props.compareData, 1)
+  const allVals = [...props.data, ...props.compareData].filter(v => v != null)
+  const maxVal = Math.max(...allVals, 1)
 
   ctx.clearRect(0, 0, w, h)
 
@@ -315,28 +341,33 @@ function drawDonut(ctx, w, h) {
   }
 }
 
-// ── 对比折线（灰色虚线）────────────────────────────────────────
+// ── 对比折线（灰色虚线，null 值处断开）────────────────────────
 function drawCompareLine(ctx, w, drawH, maxVal) {
   const n = props.compareData.length
   if (n === 0) return
   const stepX = n > 1 ? (w - 8) / (n - 1) : w
   const pts = props.compareData.map((val, i) => ({
     x: 4 + i * stepX,
-    y: 4 + drawH - (val / maxVal) * drawH * 0.9
+    y: val != null ? 4 + drawH - (val / maxVal) * drawH * 0.9 : null
   }))
 
-  // 虚线主体
-  ctx.beginPath()
-  pts.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)))
+  // 分段虚线：遇到 null 抬笔
   ctx.setStrokeStyle('rgba(160,160,170,0.7)')
   ctx.setLineWidth(1.5)
   ctx.setLineDash([6, 4])
+  let inSeg = false
+  ctx.beginPath()
+  pts.forEach(p => {
+    if (p.y == null) { inSeg = false; return }
+    if (!inSeg) { ctx.moveTo(p.x, p.y); inSeg = true }
+    else { ctx.lineTo(p.x, p.y) }
+  })
   ctx.stroke()
   ctx.setLineDash([])
 
-  // 对比数据点小圆
+  // 仅在有值的点画小圆
   if (n <= 30) {
-    pts.forEach(p => {
+    pts.filter(p => p.y != null).forEach(p => {
       ctx.beginPath()
       ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2)
       ctx.setFillStyle('rgba(160,160,170,0.7)')
@@ -352,30 +383,46 @@ function drawLine(ctx, w, drawH, h, maxVal, hoveredIdx = -1) {
 
   const pts = props.data.map((val, i) => ({
     x: 4 + i * stepX,
-    y: 4 + drawH - (val / maxVal) * drawH * 0.9
+    y: val != null ? 4 + drawH - (val / maxVal) * drawH * 0.9 : null
   }))
+  const validPts = pts.filter(p => p.y != null)
 
-  // 填充区域
-  ctx.beginPath()
-  pts.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)))
-  ctx.lineTo(pts[pts.length - 1].x, drawH + 4)
-  ctx.lineTo(pts[0].x, drawH + 4)
-  ctx.closePath()
-  ctx.setFillStyle('rgba(31,71,136,.07)')
-  ctx.fill()
+  // 填充区域（只填有值的连续段的第一段，简化处理）
+  if (validPts.length >= 2) {
+    ctx.beginPath()
+    let inSeg = false
+    pts.forEach(p => {
+      if (p.y == null) { inSeg = false; return }
+      if (!inSeg) { ctx.moveTo(p.x, p.y); inSeg = true }
+      else { ctx.lineTo(p.x, p.y) }
+    })
+    if (validPts.length) {
+      ctx.lineTo(validPts[validPts.length - 1].x, drawH + 4)
+      ctx.lineTo(validPts[0].x, drawH + 4)
+    }
+    ctx.closePath()
+    ctx.setFillStyle('rgba(31,71,136,.07)')
+    ctx.fill()
+  }
 
-  // 折线
-  ctx.beginPath()
-  pts.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)))
+  // 折线：分段绘制，null 处抬笔
   ctx.setStrokeStyle('#1f4788')
   ctx.setLineWidth(2)
   ctx.setLineCap('round')
   ctx.setLineJoin('round')
+  let inSeg = false
+  ctx.beginPath()
+  pts.forEach(p => {
+    if (p.y == null) { inSeg = false; return }
+    if (!inSeg) { ctx.moveTo(p.x, p.y); inSeg = true }
+    else { ctx.lineTo(p.x, p.y) }
+  })
   ctx.stroke()
 
-  // 所有数据点画小圆点（数据点 ≤ 20 时才画，避免密集）
+  // 数据点小圆（仅有值的点）
   if (n <= 20) {
     pts.forEach((p, i) => {
+      if (p.y == null) return
       ctx.beginPath()
       ctx.arc(p.x, p.y, i === hoveredIdx ? 5 : 3, 0, Math.PI * 2, false)
       ctx.setFillStyle(i === hoveredIdx ? '#1f4788' : 'rgba(31,71,136,.5)')
@@ -383,8 +430,8 @@ function drawLine(ctx, w, drawH, h, maxVal, hoveredIdx = -1) {
     })
   }
 
-  // touch highlight：垂直辅助线 + tooltip
-  if (hoveredIdx >= 0 && hoveredIdx < n) {
+  // touch highlight：垂直辅助线 + tooltip（跳过 null 点）
+  if (hoveredIdx >= 0 && hoveredIdx < n && pts[hoveredIdx].y != null) {
     const pt = pts[hoveredIdx]
 
     // 垂直辅助线

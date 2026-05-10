@@ -25,7 +25,8 @@ export function request(options = {}) {
     method = 'GET',
     data = {},
     showLoad = true,
-    header = {}
+    header = {},
+    timeout = 30000
   } = options
 
   if (showLoad) showLoading()
@@ -45,6 +46,7 @@ export function request(options = {}) {
       method,
       data,
       header: headers,
+      timeout,
       success(res) {
         if (showLoad) hideLoading()
 

@@ -237,7 +237,12 @@ function confirmDelete(rule) {
 }
 
 function goBack() {
-  uni.redirectTo({ url: '/pages/merchant/dashboard' })
+  const pages = getCurrentPages()
+  if (pages.length > 1) {
+    uni.navigateBack()
+  } else {
+    uni.redirectTo({ url: '/pages/merchant/mine' })
+  }
 }
 
 onMounted(() => {

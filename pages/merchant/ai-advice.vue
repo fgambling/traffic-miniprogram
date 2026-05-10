@@ -33,19 +33,29 @@
           <view class="lock-desc">
             升级中级版即可查看基于规则引擎的实时建议，涵盖备货、排班、营销三大维度
           </view>
-          <button class="btn-upgrade" @click="goUpgrade">立即升级中级版</button>
+          <button class="btn-upgrade" @click="goUpgrade">立即升级</button>
         </view>
       </view>
     </template>
 
-    <!-- ───── 高级版：大模型预留位 ───── -->
+    <!-- ───── 高级版：规则引擎 + AI 大模型双 Tab ───── -->
     <template v-else-if="packageType === 3">
-      <!-- 仍显示规则建议列表（高级版向下兼容中级版功能） -->
-      <view class="mid-header">
-        <view class="mid-header-title">规则建议</view>
-        <view class="mid-header-sub">以下为规则引擎实时生成</view>
+      <!-- 来源 Tab -->
+      <view class="source-tab-switch">
+        <view
+          class="source-tab"
+          :class="{ active: sourceTab === 1 }"
+          @click="switchSourceTab(1)"
+        >AI 大模型</view>
+        <view
+          class="source-tab"
+          :class="{ active: sourceTab === 0 }"
+          @click="switchSourceTab(0)"
+        >规则引擎</view>
       </view>
-      <view class="tab-switch">
+
+      <!-- 规则引擎 Tab：类型筛选 -->
+      <view v-if="sourceTab === 0" class="tab-switch">
         <button
           v-for="(t, i) in filterTabs"
           :key="i"
@@ -66,33 +76,22 @@
             <view class="ac-tag" :style="{ background: advice.tagBg, color: advice.color }">
               {{ advice.adviceType }}
             </view>
+            <view v-if="sourceTab === 1" class="ac-ai-tag">✨ AI</view>
           </view>
           <view class="ac-desc">{{ advice.content }}</view>
           <view class="ac-time">{{ advice.createdAt }}</view>
         </view>
       </view>
       <view v-else-if="!loading" class="empty-state">
-        <text class="empty-icon">💡</text>
-        <text class="empty-title">暂无该类型建议</text>
-        <text class="empty-sub">点击右下角按钮立即生成</text>
+        <text class="empty-icon">{{ sourceTab === 1 ? '✨' : '💡' }}</text>
+        <text class="empty-title">暂无{{ sourceTab === 1 ? 'AI 大模型' : '规则引擎' }}建议</text>
+        <text class="empty-sub">{{ sourceTab === 1 ? '点击右下角按钮立即生成' : '系统每 15 分钟自动检测并生成建议' }}</text>
       </view>
       <view v-if="hasMore && advices.length > 0" class="load-more" @click="loadMore">
         <text>{{ loadingMore ? '加载中...' : '加载更多' }}</text>
       </view>
 
-      <!-- 高级版 AI 大模型预留区 -->
-      <view class="advanced-placeholder">
-        <view class="ap-icon">✨</view>
-        <view class="ap-body">
-          <view class="ap-title">AI 大模型建议</view>
-          <view class="ap-tag">即将上线</view>
-        </view>
-        <view class="ap-desc">
-          高级版将接入大语言模型，结合客流数据、菜单与历史经营情况，生成个性化深度运营策略。
-        </view>
-      </view>
-
-      <view class="fab" @click="showGenSheet = true">⚡</view>
+      <view v-if="sourceTab === 1" class="fab" @click="onFabClick">⚡</view>
     </template>
 
     <!-- ───── 中级版：规则引擎建议列表 ───── -->
@@ -127,14 +126,12 @@
       <view v-else-if="!loading" class="empty-state">
         <text class="empty-icon">💡</text>
         <text class="empty-title">暂无该类型建议</text>
-        <text class="empty-sub">点击右下角按钮立即生成</text>
+        <text class="empty-sub">系统每 15 分钟自动检测并生成建议</text>
       </view>
 
       <view v-if="hasMore && advices.length > 0" class="load-more" @click="loadMore">
         <text>{{ loadingMore ? '加载中...' : '加载更多' }}</text>
       </view>
-
-      <view class="fab" @click="showGenSheet = true">⚡</view>
     </template>
 
     <view class="bottom-spacer" />
@@ -167,9 +164,34 @@
     <BottomSheet :show="showGenSheet" title="生成经营建议" @close="showGenSheet = false">
       <view class="gen-body">
         <text class="gen-desc">
-          系统将基于最新客流数据，自动匹配内置规则，为您生成备货、排班与营销建议。
+          {{ packageType === 3 && sourceTab === 1
+            ? '系统将调用 AI 大模型，结合您的客流数据与门店信息，生成个性化经营建议。'
+            : '系统将基于最新客流数据，自动匹配内置规则，为您生成备货、排班与营销建议。' }}
         </text>
-        <button class="btn-gen" @click="generateAdvice">立即生成</button>
+        <!-- 高级版 AI 大模型：选择数据范围 + 剩余次数 -->
+        <template v-if="packageType === 3 && sourceTab === 1">
+          <view class="gen-mode-label">分析范围</view>
+          <view class="gen-mode-opts">
+            <view class="gen-mode-opt"
+              :class="{ active: genMode === 'today', disabled: rangeAvail.today === false }"
+              @click="rangeAvail.today !== false && (genMode = 'today')">
+              <text class="gmo-title">当日建议</text>
+              <text class="gmo-sub">{{ rangeAvail.today === false ? '今日暂无客流数据' : '分析今日全天客流数据' }}</text>
+            </view>
+            <view class="gen-mode-opt"
+              :class="{ active: genMode === 'lastHour', disabled: rangeAvail.lastHour === false }"
+              @click="rangeAvail.lastHour !== false && (genMode = 'lastHour')">
+              <text class="gmo-title">过去一小时</text>
+              <text class="gmo-sub">{{ rangeAvail.lastHour === false ? '过去一小时暂无客流数据' : '分析最近1小时实时数据' }}</text>
+            </view>
+          </view>
+          <view v-if="dailyRemain !== null" class="gen-remain" :class="{ 'gen-remain-warn': dailyRemain === 0 }">
+            {{ dailyRemain === 0 ? '今日生成次数已用完' : `今日剩余生成次数：${dailyRemain} 次` }}
+          </view>
+        </template>
+        <button class="btn-gen"
+          :disabled="(packageType === 3 && sourceTab === 1 && (!genMode || dailyRemain === 0))"
+          @click="generateAdvice">立即生成</button>
       </view>
     </BottomSheet>
   </view>
@@ -187,8 +209,9 @@ const typeColorMap = {
   备货: { color: '#1a4a8a', tagBg: '#e4edfa' },
   排班: { color: '#17794a', tagBg: '#e8f5e9' },
   营销: { color: '#e8842a', tagBg: '#fff3e0' },
+  服务: { color: '#6b3399', tagBg: '#f3e5f5' },
 }
-const defaultColor = { color: '#6b3399', tagBg: '#f3e5f5' }
+const defaultColor = { color: '#666', tagBg: '#f5f5f5' }
 
 // ── 套餐：1=普通 2=中级 3=高级 ───────────────────────────────
 const packageType = ref(1)
@@ -197,7 +220,7 @@ const pkgBadgeText = computed(() => ['', '普通版', '中级版', '高级版'][
 const pkgBadgeClass = computed(() => ['', 'badge-basic', 'badge-mid', 'badge-advanced'][packageType.value] || 'badge-mid')
 const headerSubText = computed(() => {
   if (packageType.value === 1) return '升级中级版即可解锁智能经营建议'
-  if (packageType.value === 3) return '规则建议 + AI 大模型（即将上线）'
+  if (packageType.value === 3) return '规则建议 + AI 大模型'
   return '基于规则引擎的实时经营建议'
 })
 
@@ -224,11 +247,16 @@ const lockedPlaceholders = [
 ]
 
 // ── 列表状态 ──────────────────────────────────────────────────
-const filterTabs    = ['全部', '备货', '排班', '营销']
-const filterTypeMap = { 1: '备货', 2: '排班', 3: '营销' }
+const filterTabs    = ['全部', '备货', '排班', '营销', '服务']
+const filterTypeMap = { 1: '备货', 2: '排班', 3: '营销', 4: '服务' }
 const activeFilter  = ref(0)
+const sourceTab     = ref(1)   // 高级版：0=规则引擎(source=1)  1=AI大模型(source=2)
 const showDetailSheet = ref(false)
 const showGenSheet    = ref(false)
+const llmAvailable    = ref(false)
+const genMode         = ref('')       // '' | 'today' | 'lastHour'，默认不选
+const dailyRemain     = ref(null)     // null=无限制, 数字=剩余次数
+const rangeAvail      = ref({ today: null, lastHour: null })  // null=加载中
 const currentAdvice   = ref(null)
 const loading         = ref(true)
 const loadingMore     = ref(false)
@@ -247,7 +275,7 @@ async function fetchPackage() {
 }
 
 function goUpgrade() {
-  uni.switchTab({ url: '/pages/merchant/mine' })
+  uni.showToast({ title: '请联系管理员升级套餐', icon: 'none', duration: 2500 })
 }
 
 // ── 建议列表 ──────────────────────────────────────────────────
@@ -260,7 +288,8 @@ async function fetchList(reset = false) {
   if (packageType.value === 1) { loading.value = false; return }
   if (reset) { page.value = 1; advices.value = [] }
   const params = { page: page.value, size: pageSize }
-  if (activeFilter.value > 0) params.type = filterTypeMap[activeFilter.value]
+  if (packageType.value === 3) params.source = sourceTab.value === 1 ? 2 : 1
+  if (sourceTab.value === 0 && activeFilter.value > 0) params.type = filterTypeMap[activeFilter.value]
   try {
     const data = await get('/api/merchant/advice/list', params, { showLoad: reset })
     const items = (data.list || []).map(enrichItem)
@@ -282,13 +311,25 @@ async function loadMore() {
 }
 
 watch(activeFilter, () => { loading.value = true; fetchList(true) })
+watch(sourceTab,    () => { activeFilter.value = 0; loading.value = true; fetchList(true) })
 
 onMounted(async () => {
   await fetchPackage()
   fetchList(true)
+  if (packageType.value === 3) {
+    try {
+      const ok = await get('/api/merchant/advice/llm-available', {}, { showLoad: false })
+      llmAvailable.value = !!ok
+    } catch (_) {}
+  }
 })
 
 // ── 交互 ──────────────────────────────────────────────────────
+function switchSourceTab(idx) {
+  if (sourceTab.value === idx) return
+  sourceTab.value = idx
+}
+
 function openDetail(advice) {
   currentAdvice.value  = advice
   showDetailSheet.value = true
@@ -302,12 +343,45 @@ function sendFeedback(advice, type) {
   uni.showToast({ title: '感谢反馈', icon: 'success' })
 }
 
+async function onFabClick() {
+  if (packageType.value === 3 && sourceTab.value === 1) {
+    if (!llmAvailable.value) {
+      uni.showToast({ title: '管理员尚未配置大模型，请联系管理员', icon: 'none', duration: 2500 })
+      return
+    }
+    genMode.value = ''
+    rangeAvail.value = { today: null, lastHour: null }
+    // 并行拉取：数据可用性 + 剩余次数
+    const [checkRes, remainRes] = await Promise.allSettled([
+      get('/api/merchant/advice/data-check', {}, { showLoad: false }),
+      get('/api/merchant/advice/daily-remain', {}, { showLoad: false })
+    ])
+    rangeAvail.value = checkRes.status === 'fulfilled'
+      ? checkRes.value
+      : { today: true, lastHour: true }  // 接口失败时不限制
+    dailyRemain.value = remainRes.status === 'fulfilled' && remainRes.value.remain !== -1
+      ? remainRes.value.remain
+      : null
+  }
+  showGenSheet.value = true
+}
+
 function generateAdvice() {
+  const isLlm = packageType.value === 3 && sourceTab.value === 1
+  const mode  = isLlm ? genMode.value : 'today'
   showGenSheet.value = false
-  uni.showToast({ title: '正在生成，请稍候...', icon: 'loading', duration: 2000 })
-  post('/api/merchant/advice/generate', {}, { showLoad: false })
-    .then(() => { setTimeout(() => fetchList(true), 2000) })
-    .catch(() => {})
+  uni.showToast({ title: '正在生成，请稍候...', icon: 'loading', duration: 90000 })
+  post(`/api/merchant/advice/generate?mode=${mode}`, {}, { showLoad: false, timeout: 120000 })
+    .then(() => {
+      uni.hideToast()
+      uni.showToast({ title: '生成成功', icon: 'success', duration: 1500 })
+      setTimeout(() => fetchList(true), 1500)
+    })
+    .catch(err => {
+      uni.hideToast()
+      const msg = err?.message || err?.msg || '生成失败，请稍后重试'
+      uni.showToast({ title: msg, icon: 'none', duration: 3000 })
+    })
 }
 </script>
 
@@ -347,6 +421,45 @@ function generateAdvice() {
   }
 
   .header-sub { font-size: 24rpx; opacity: 0.7; margin-top: 4rpx; }
+}
+
+/* ── 高级版来源 Tab ── */
+.source-tab-switch {
+  display: flex;
+  margin: 20rpx 32rpx 0;
+  background: #eef1f8;
+  border-radius: 20rpx;
+  padding: 6rpx;
+  gap: 0;
+
+  .source-tab {
+    flex: 1;
+    height: 64rpx;
+    line-height: 64rpx;
+    text-align: center;
+    font-size: 26rpx;
+    color: #888;
+    border-radius: 16rpx;
+    transition: all .2s;
+
+    &.active {
+      background: #fff;
+      color: #1f4788;
+      font-weight: 600;
+      box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.08);
+    }
+
+    &:active { opacity: 0.75; }
+  }
+}
+
+.ac-ai-tag {
+  font-size: 18rpx;
+  padding: 3rpx 12rpx;
+  border-radius: 12rpx;
+  background: linear-gradient(135deg, #7b2ff7, #4a90e2);
+  color: #fff;
+  font-weight: 500;
 }
 
 /* ── Tab 筛选条 ── */
@@ -523,52 +636,6 @@ function generateAdvice() {
   }
 }
 
-/* ══════════════════════════════════════════════
-   高级版：规则列表 + 大模型预留区
-══════════════════════════════════════════════ */
-.mid-header {
-  display: flex;
-  align-items: baseline;
-  gap: 12rpx;
-  padding: 24rpx 32rpx 0;
-
-  .mid-header-title { font-size: 28rpx; font-weight: 600; color: #1a1a2e; }
-  .mid-header-sub   { font-size: 22rpx; color: #aaa; }
-}
-
-.advanced-placeholder {
-  margin: 28rpx 32rpx 0;
-  padding: 36rpx 32rpx;
-  background: #fff;
-  border-radius: 24rpx;
-  box-shadow: 0 2rpx 12rpx rgba(0,0,0,0.04);
-  border: 1rpx dashed rgba(107,51,153,0.22);
-
-  .ap-icon { font-size: 48rpx; margin-bottom: 12rpx; }
-
-  .ap-body {
-    display: flex;
-    align-items: center;
-    gap: 16rpx;
-    margin-bottom: 14rpx;
-  }
-
-  .ap-title { font-size: 28rpx; color: #1a1a2e; font-weight: 600; }
-
-  .ap-tag {
-    font-size: 18rpx;
-    padding: 4rpx 14rpx;
-    border-radius: 14rpx;
-    background: linear-gradient(135deg, #ff8a00, #e52e71);
-    color: #fff;
-  }
-
-  .ap-desc {
-    font-size: 24rpx;
-    color: #999;
-    line-height: 1.7;
-  }
-}
 
 /* ── 详情弹层 ── */
 .detail-body {
@@ -602,12 +669,59 @@ function generateAdvice() {
 
 /* ── 生成弹层 ── */
 .gen-body {
+  .gen-mode-label {
+    font-size: 26rpx;
+    color: #666;
+    margin: 28rpx 0 16rpx;
+  }
+
+  .gen-mode-opts {
+    display: flex;
+    gap: 16rpx;
+    margin-bottom: 8rpx;
+  }
+
+  .gen-mode-opt {
+    flex: 1;
+    padding: 24rpx 20rpx;
+    border-radius: 16rpx;
+    border: 2rpx solid #e0e6f0;
+    background: #f8f9fc;
+
+    &.active {
+      border-color: #1f4788;
+      background: rgba(31, 71, 136, 0.06);
+      .gmo-title { color: #1f4788; font-weight: 600; }
+    }
+
+    &.disabled {
+      opacity: 0.45;
+      .gmo-sub { color: #e6a23c; }
+    }
+
+    &:active { opacity: 0.75; }
+
+    .gmo-title { display: block; font-size: 28rpx; color: #333; margin-bottom: 8rpx; }
+    .gmo-sub   { display: block; font-size: 22rpx; color: #aaa; }
+  }
+
   .gen-desc {
     font-size: 26rpx;
     color: #666;
     line-height: 1.7;
     display: block;
     margin-bottom: 32rpx;
+  }
+
+  .gen-remain {
+    margin-top: 20rpx;
+    font-size: 24rpx;
+    color: #17794a;
+    text-align: center;
+    &.gen-remain-warn {
+      color: #e6a23c;
+      font-weight: 600;
+    }
   }
 
   .btn-gen {
@@ -622,6 +736,10 @@ function generateAdvice() {
     line-height: 96rpx;
     box-sizing: border-box;
     padding: 0;
+    &[disabled] {
+      background: #c8c9cc;
+      opacity: 1;
+    }
   }
 }
 </style>
