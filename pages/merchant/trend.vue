@@ -148,6 +148,19 @@
             </view>
           </view>
 
+          <!-- 新客 / 回头客 -->
+          <template v-if="newRatio > 0 || returnRatio > 0">
+            <view class="ps-section-label">客户构成</view>
+            <view class="gender-bar-wrap">
+              <view class="gb-new"      :style="{ width: newRatio    + '%' }" />
+              <view class="gb-return"   :style="{ width: returnRatio + '%' }" />
+            </view>
+            <view class="gender-legend">
+              <text class="gl-new">新客 {{ newRatio }}%</text>
+              <text class="gl-return">回头客 {{ returnRatio }}%</text>
+            </view>
+          </template>
+
           <!-- 性别 -->
           <view class="ps-section-label">性别构成</view>
           <view class="gender-bar-wrap">
@@ -732,6 +745,12 @@ const newRatio = computed(() => {
   const d = selectedProfile.value
   if (!d || !d.totalEnter) return 0
   return pct(d.newCustomerCount, d.totalEnter)
+})
+
+const returnRatio = computed(() => {
+  const d = selectedProfile.value
+  if (!d || !d.totalEnter) return 0
+  return pct(d.returningCustomerCount, d.totalEnter)
 })
 
 const ageData = computed(() => {
@@ -1374,6 +1393,8 @@ async function loadStayAnalysis(idx) {
 
     .gb-male   { background: linear-gradient(90deg, #1a4a8a, #3a7ad6); transition: width .3s; }
     .gb-female { background: linear-gradient(90deg, #d64a7a, #e8729a); transition: width .3s; }
+    .gb-new    { background: linear-gradient(90deg, #17794a, #34a871); transition: width .3s; }
+    .gb-return { background: linear-gradient(90deg, #e8842a, #f5a742); transition: width .3s; }
   }
 
   .gender-legend {
@@ -1384,6 +1405,8 @@ async function loadStayAnalysis(idx) {
 
     .gl-male   { color: #2d6fd6; }
     .gl-female { color: #d64a7a; }
+    .gl-new    { color: #17794a; }
+    .gl-return { color: #e8842a; }
   }
 
   .age-cols {

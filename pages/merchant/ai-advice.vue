@@ -54,8 +54,8 @@
         >规则引擎</view>
       </view>
 
-      <!-- 规则引擎 Tab：类型筛选 -->
-      <view v-if="sourceTab === 0" class="tab-switch">
+      <!-- 两个 Tab 共用类型筛选按钮 -->
+      <view class="tab-switch">
         <button
           v-for="(t, i) in filterTabs"
           :key="i"
@@ -64,29 +64,58 @@
         >{{ t }}</button>
       </view>
 
-      <view v-if="advices.length > 0">
-        <view
-          v-for="advice in advices"
-          :key="advice.id"
-          class="advice-card"
-          :style="{ borderLeftColor: advice.color }"
-          @click="openDetail(advice)"
-        >
-          <view class="ac-tags">
-            <view class="ac-tag" :style="{ background: advice.tagBg, color: advice.color }">
-              {{ advice.adviceType }}
+      <!-- AI 大模型：平铺列表 -->
+      <template v-if="sourceTab === 1">
+        <view v-if="advices.length > 0">
+          <view
+            v-for="advice in advices"
+            :key="advice.id"
+            class="advice-card"
+            :style="{ borderLeftColor: advice.color }"
+            @click="openDetail(advice)"
+          >
+            <view class="ac-tags">
+              <view class="ac-tag" :style="{ background: advice.tagBg, color: advice.color }">{{ advice.adviceType }}</view>
+              <view class="ac-ai-tag">✨ AI</view>
+              <view v-if="advice.confidence === '高'" class="ac-conf-tag conf-high">高</view>
+              <view v-else-if="advice.confidence === '中'" class="ac-conf-tag conf-mid">中</view>
+              <view v-else-if="advice.confidence === '低'" class="ac-conf-tag conf-low">低</view>
             </view>
-            <view v-if="sourceTab === 1" class="ac-ai-tag">✨ AI</view>
+            <view class="ac-desc">{{ advice.content }}</view>
+            <view class="ac-time">{{ advice.createdAt }}</view>
           </view>
-          <view class="ac-desc">{{ advice.content }}</view>
-          <view class="ac-time">{{ advice.createdAt }}</view>
         </view>
-      </view>
-      <view v-else-if="!loading" class="empty-state">
-        <text class="empty-icon">{{ sourceTab === 1 ? '✨' : '💡' }}</text>
-        <text class="empty-title">暂无{{ sourceTab === 1 ? 'AI 大模型' : '规则引擎' }}建议</text>
-        <text class="empty-sub">{{ sourceTab === 1 ? '点击右下角按钮立即生成' : '系统每 15 分钟自动检测并生成建议' }}</text>
-      </view>
+        <view v-else-if="!loading" class="empty-state">
+          <text class="empty-icon">✨</text>
+          <text class="empty-title">暂无 AI 大模型建议</text>
+          <text class="empty-sub">点击右下角按钮立即生成</text>
+        </view>
+      </template>
+
+      <!-- 规则引擎：平铺列表 -->
+      <template v-else>
+        <view v-if="advices.length > 0">
+          <view
+            v-for="advice in advices"
+            :key="advice.id"
+            class="advice-card"
+            :style="{ borderLeftColor: advice.color }"
+            @click="openDetail(advice)"
+          >
+            <view class="ac-tags">
+              <view class="ac-tag" :style="{ background: advice.tagBg, color: advice.color }">{{ advice.adviceType }}</view>
+            </view>
+            <view class="ac-desc">{{ advice.content }}</view>
+            <view class="ac-time">{{ advice.createdAt }}</view>
+          </view>
+        </view>
+        <view v-else-if="!loading" class="empty-state">
+          <text class="empty-icon">💡</text>
+          <text class="empty-title">暂无规则引擎建议</text>
+          <text class="empty-sub">系统每 15 分钟自动检测并生成建议</text>
+        </view>
+      </template>
+
       <view v-if="hasMore && advices.length > 0" class="load-more" @click="loadMore">
         <text>{{ loadingMore ? '加载中...' : '加载更多' }}</text>
       </view>
@@ -289,7 +318,7 @@ async function fetchList(reset = false) {
   if (reset) { page.value = 1; advices.value = [] }
   const params = { page: page.value, size: pageSize }
   if (packageType.value === 3) params.source = sourceTab.value === 1 ? 2 : 1
-  if (sourceTab.value === 0 && activeFilter.value > 0) params.type = filterTypeMap[activeFilter.value]
+  if (activeFilter.value > 0) params.type = filterTypeMap[activeFilter.value]
   try {
     const data = await get('/api/merchant/advice/list', params, { showLoad: reset })
     const items = (data.list || []).map(enrichItem)
@@ -452,6 +481,45 @@ function generateAdvice() {
     &:active { opacity: 0.75; }
   }
 }
+
+.category-section { margin: 24rpx 32rpx 0; }
+
+.category-header {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  padding: 16rpx 20rpx;
+  background: #fff;
+  border-radius: 16rpx 16rpx 0 0;
+  border-left: 8rpx solid #ccc;
+  border-bottom: 1rpx solid #f0f0f0;
+}
+
+.cat-type-tag {
+  font-size: 24rpx;
+  font-weight: 700;
+  padding: 4rpx 18rpx;
+  border-radius: 20rpx;
+}
+
+.cat-count { font-size: 22rpx; color: #999; }
+
+.ai-card {
+  margin: 0;
+  border-radius: 0;
+  border-left: none !important;
+  border-bottom: 1rpx solid #f5f5f5;
+}
+
+.ai-card:last-child {
+  border-radius: 0 0 16rpx 16rpx;
+  border-bottom: none;
+}
+
+.ac-conf-tag { font-size: 18rpx; padding: 3rpx 10rpx; border-radius: 10rpx; }
+.conf-high { background: #e8f5e9; color: #17794a; }
+.conf-mid  { background: #fff3e0; color: #e8842a; }
+.conf-low  { background: #fce4ec; color: #c62828; }
 
 .ac-ai-tag {
   font-size: 18rpx;

@@ -98,7 +98,7 @@
             <view class="lc-icon" :style="{ background: statusColors[record.status]?.bg || '#f5f5f5' }">💸</view>
             <view class="lc-info">
               <view class="lc-title">提现 ¥{{ fmtAmt(record.amount) }}</view>
-              <view class="lc-sub">{{ wayLabel(record.way) }} · {{ record.account }} · {{ formatDate(record.createdAt) }}</view>
+              <view class="lc-sub">{{ formatDate(record.createdAt) }}</view>
               <!-- 驳回原因 -->
               <view v-if="record.status === 2 && record.remark" class="lc-reject-reason">
                 驳回原因：{{ record.remark }}
@@ -181,25 +181,6 @@
           <text class="form-label">提现金额</text>
           <input v-model="withdrawForm.amount" class="form-input" placeholder="不低于 100 元" type="digit" />
         </view>
-        <view class="form-item">
-          <text class="form-label">提现方式</text>
-          <view class="way-picker">
-            <view
-              class="wp-item"
-              :class="{ active: withdrawForm.way === 1 }"
-              @click="withdrawForm.way = 1"
-            >微信零钱</view>
-            <view
-              class="wp-item"
-              :class="{ active: withdrawForm.way === 2 }"
-              @click="withdrawForm.way = 2"
-            >银行卡</view>
-          </view>
-        </view>
-        <view class="form-item">
-          <text class="form-label">{{ withdrawForm.way === 1 ? '微信号' : '银行卡号' }}</text>
-          <input v-model="withdrawForm.account" class="form-input" placeholder="请输入收款账号" />
-        </view>
         <button class="btn-submit" @click="submitWithdraw">确认申请</button>
       </view>
     </BottomSheet>
@@ -236,7 +217,7 @@ const withdrawSize  = 10
 const withdrawTotal = ref(0)
 
 const showWithdrawSheet = ref(false)
-const withdrawForm = ref({ amount: '', way: 1, account: '' })
+const withdrawForm = ref({ amount: '' })
 
 const showMerchantDetail = ref(false)
 const detailMerchant = ref(null)
@@ -267,7 +248,7 @@ function fmtAmt(v) {
 
 function formatDate(dt) {
   if (!dt) return '--'
-  const d = new Date(dt)
+  const d = new Date(String(dt).replace(' ', 'T'))
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
@@ -339,18 +320,11 @@ async function submitWithdraw() {
   if (amount > profile.value.balance) {
     uni.showToast({ title: '超出可提现余额', icon: 'none' }); return
   }
-  if (!withdrawForm.value.account) {
-    uni.showToast({ title: '请填写收款账号', icon: 'none' }); return
-  }
   try {
-    await post('/api/salesman/withdraw', {
-      amount,
-      way:     withdrawForm.value.way,
-      account: withdrawForm.value.account
-    })
+    await post('/api/salesman/withdraw', { amount })
     uni.showToast({ title: '申请已提交', icon: 'success' })
     showWithdrawSheet.value = false
-    withdrawForm.value = { amount: '', way: 1, account: '' }
+    withdrawForm.value = { amount: '' }
     await Promise.all([fetchProfile(), fetchWithdraw(true)])
     activeTab.value = 'withdraw'
   } catch (e) {

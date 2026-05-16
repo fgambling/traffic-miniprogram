@@ -147,6 +147,10 @@
             <text class="action-icon">📝</text>
             <text class="action-label">添加记录</text>
           </view>
+          <view v-if="detailStatus === 2" class="action-btn" :class="{ active: activePanel === 'bizinfo' }" @click="togglePanel('bizinfo')">
+            <text class="action-icon">🏪</text>
+            <text class="action-label">门店信息</text>
+          </view>
           <view v-if="detailStatus === 3" class="action-btn action-btn-danger" @click="deleteFollow">
             <text class="action-icon">🗑️</text>
             <text class="action-label">删除记录</text>
@@ -282,6 +286,42 @@
           </button>
         </view>
 
+        <!-- ── 门店信息面板 ── -->
+        <view v-if="activePanel === 'bizinfo'" class="panel panel-bizinfo">
+          <view v-if="bizLoading" class="bizinfo-loading"><text>加载中...</text></view>
+          <template v-else>
+            <view class="biz-section-label">店铺业态</view>
+            <view class="biz-type-grid">
+              <view v-for="t in businessTypes" :key="t.value"
+                class="biz-type-tag" :class="{ active: bizForm.businessType === t.value }"
+                @click="onBizTypeTag(t.value)">{{ t.label }}</view>
+            </view>
+            <input v-if="bizForm.businessType === '其他' || (!businessTypes.find(t => t.value === bizForm.businessType) && bizForm.businessType)"
+              v-model="bizCustomType" class="pf-input" placeholder="请输入业态名称"
+              @input="bizForm.businessType = bizCustomType" />
+
+            <view class="biz-section-label">菜单 / 商品</view>
+            <textarea v-model="bizForm.menu" class="note-input"
+              placeholder="列出主要商品或分类..." :maxlength="500" />
+
+            <view class="biz-section-label">当期促销活动</view>
+            <textarea v-model="bizForm.promotions" class="note-input"
+              placeholder="例：满30减5，学生证9折..." :maxlength="300" />
+
+            <view class="biz-section-label">营业时间</view>
+            <textarea v-model="bizForm.businessHours" class="note-input"
+              placeholder="例：周一至周日 10:00-22:00" :maxlength="200" />
+
+            <view class="biz-section-label">目标客群</view>
+            <textarea v-model="bizForm.targetAudience" class="note-input"
+              placeholder="例：周边写字楼白领，18-35岁..." :maxlength="300" />
+
+            <button class="btn-panel-submit" @click="saveBizInfo" :disabled="bizSaving">
+              {{ bizSaving ? '保存中...' : '保存门店信息' }}
+            </button>
+          </template>
+        </view>
+
         <!-- ── 历史跟进记录时间线 ── -->
         <view class="history-section">
           <view class="history-title">历史记录</view>
@@ -369,6 +409,63 @@ const joinRequests = ref([])  // 收到的联合跟进申请
 // ─── 面板状态 ────────────────────────────────────────────────
 const activePanel = ref(null)   // 'info' | 'status' | 'record' | null
 
+// ─── 门店信息面板 ────────────────────────────────────────────
+const bizForm     = ref({ businessType: '', menu: '', promotions: '', businessHours: '', targetAudience: '' })
+const bizCustomType = ref('')
+const bizLoading  = ref(false)
+const bizSaving   = ref(false)
+const businessTypes = [
+  { value: '餐饮', label: '🍜 餐饮' },
+  { value: '商超', label: '🛒 商超' },
+  { value: '服装', label: '👗 服装' },
+  { value: '美妆', label: '💄 美妆' },
+  { value: '数码', label: '📱 数码' },
+  { value: '书店', label: '📚 书店' },
+  { value: '健身', label: '💪 健身' },
+  { value: '其他', label: '🏪 其他' },
+]
+
+function onBizTypeTag(val) {
+  if (bizForm.value.businessType === val) {
+    bizForm.value.businessType = ''
+    bizCustomType.value = ''
+  } else {
+    bizForm.value.businessType = val !== '其他' ? val : bizCustomType.value
+    if (val !== '其他') bizCustomType.value = ''
+  }
+}
+
+async function loadBizInfo(merchantId) {
+  bizLoading.value = true
+  try {
+    const data = await get(`/api/salesman/merchant/${merchantId}/business-info`, {}, { showLoad: false })
+    if (data) {
+      const bt = data.businessType || ''
+      const isPreset = businessTypes.some(t => t.value !== '其他' && t.value === bt)
+      bizCustomType.value = isPreset ? '' : bt
+      bizForm.value = {
+        businessType:  bt,
+        menu:          data.menu          || '',
+        promotions:    data.promotions    || '',
+        businessHours: data.businessHours || '',
+        targetAudience: data.targetAudience || '',
+      }
+    }
+  } catch (_) {}
+  bizLoading.value = false
+}
+
+async function saveBizInfo() {
+  bizSaving.value = true
+  try {
+    await put(`/api/salesman/merchant/${currentItem.value.merchantId}/business-info`, bizForm.value)
+    uni.showToast({ title: '保存成功', icon: 'success' })
+  } catch (_) {
+    uni.showToast({ title: '保存失败', icon: 'none' })
+  }
+  bizSaving.value = false
+}
+
 // ─── 更改信息面板 ────────────────────────────────────────────
 const editForm = ref({ name: '', contact: '', phone: '', address: '', license: '' })
 const savingInfo = ref(false)
@@ -434,9 +531,15 @@ function toDisplayItem(vo, idx) {
   }
 }
 
+// iOS 只支持 "yyyy/MM/dd HH:mm:ss" 或 ISO 格式，统一替换空格为 T
+function parseDate(dt) {
+  if (!dt) return new Date(NaN)
+  return new Date(String(dt).replace(' ', 'T'))
+}
+
 function formatRelTime(dt) {
   if (!dt) return '--'
-  const diff = Date.now() - new Date(dt).getTime()
+  const diff = Date.now() - parseDate(dt).getTime()
   const days = Math.floor(diff / 86400000)
   if (days === 0) return '今天'
   if (days === 1) return '昨天'
@@ -447,7 +550,7 @@ function formatRelTime(dt) {
 
 function formatDateTime(dt) {
   if (!dt) return '--'
-  const d = new Date(dt)
+  const d = parseDate(dt)
   return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
@@ -562,7 +665,11 @@ function closeDetail() {
 }
 
 function togglePanel(name) {
-  activePanel.value = activePanel.value === name ? null : name
+  const prev = activePanel.value
+  activePanel.value = prev === name ? null : name
+  if (activePanel.value === 'bizinfo' && prev !== 'bizinfo') {
+    loadBizInfo(currentItem.value.merchantId)
+  }
 }
 
 // ─── 更改信息 ────────────────────────────────────────────────
@@ -1211,6 +1318,40 @@ onMounted(() => {
 }
 
 /* 更改信息面板 */
+.biz-section-label {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #555;
+  margin: 20rpx 0 10rpx;
+}
+
+.biz-type-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  margin-bottom: 8rpx;
+}
+
+.biz-type-tag {
+  padding: 8rpx 24rpx;
+  border-radius: 30rpx;
+  font-size: 24rpx;
+  background: #eef1f8;
+  color: #555;
+}
+
+.biz-type-tag.active {
+  background: #1a4a8a;
+  color: #fff;
+}
+
+.bizinfo-loading {
+  text-align: center;
+  padding: 40rpx 0;
+  color: #999;
+  font-size: 26rpx;
+}
+
 .panel-field {
   margin-bottom: 20rpx;
 

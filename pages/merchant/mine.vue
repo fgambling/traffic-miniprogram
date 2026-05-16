@@ -242,6 +242,7 @@ async function fetchMerchantInfo() {
     if (data) {
       storeName.value = data.merchantName || storeName.value
       if (data.packageType) packageType.value = data.packageType
+      if (data.packageExpireAt) expireDate.value = data.packageExpireAt
     }
   } catch (_) {}
 }
