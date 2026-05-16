@@ -329,7 +329,7 @@ function fmtAmt(val) {
 
 function fmtDate(dt) {
   if (!dt) return '--'
-  const d = new Date(dt)
+  const d = new Date(String(dt).replace(' ', 'T'))
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
