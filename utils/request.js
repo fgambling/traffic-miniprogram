@@ -79,8 +79,9 @@ export function request(options = {}) {
       },
       fail(err) {
         if (showLoad) hideLoading()
-        uni.showToast({ title: '网络连接失败', icon: 'none' })
-        reject(err)
+        const isTimeout = err?.errMsg?.includes('timeout')
+        uni.showToast({ title: isTimeout ? '请求超时，请稍后重试' : '网络连接失败', icon: 'none' })
+        reject(new Error(isTimeout ? 'timeout' : (err?.errMsg || '网络连接失败')))
       }
     })
   })

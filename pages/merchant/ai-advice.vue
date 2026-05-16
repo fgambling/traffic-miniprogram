@@ -116,8 +116,12 @@
         </view>
       </template>
 
-      <view v-if="hasMore && advices.length > 0" class="load-more" @click="loadMore">
-        <text>{{ loadingMore ? '加载中...' : '加载更多' }}</text>
+      <view v-if="total > pageSize" class="pagination">
+        <view class="pg-btn" :class="{ disabled: page <= 1 }" @click="goFirst">首页</view>
+        <view class="pg-btn" :class="{ disabled: page <= 1 }" @click="prevPage">‹</view>
+        <text class="pg-info">{{ page }} / {{ totalPages }}</text>
+        <view class="pg-btn" :class="{ disabled: page >= totalPages }" @click="nextPage">›</view>
+        <view class="pg-btn" :class="{ disabled: page >= totalPages }" @click="goLast">尾页</view>
       </view>
 
       <view v-if="sourceTab === 1" class="fab" @click="onFabClick">⚡</view>
@@ -158,13 +162,78 @@
         <text class="empty-sub">系统每 15 分钟自动检测并生成建议</text>
       </view>
 
-      <view v-if="hasMore && advices.length > 0" class="load-more" @click="loadMore">
-        <text>{{ loadingMore ? '加载中...' : '加载更多' }}</text>
+      <view v-if="total > pageSize" class="pagination">
+        <view class="pg-btn" :class="{ disabled: page <= 1 }" @click="goFirst">首页</view>
+        <view class="pg-btn" :class="{ disabled: page <= 1 }" @click="prevPage">‹</view>
+        <text class="pg-info">{{ page }} / {{ totalPages }}</text>
+        <view class="pg-btn" :class="{ disabled: page >= totalPages }" @click="nextPage">›</view>
+        <view class="pg-btn" :class="{ disabled: page >= totalPages }" @click="goLast">尾页</view>
       </view>
     </template>
 
     <view class="bottom-spacer" />
     <TabBar role="merchant" :current="2" />
+
+    <!-- 升级套餐申请弹层 -->
+    <BottomSheet :show="showUpgradeSheet" title="申请升级套餐" @close="showUpgradeSheet = false">
+      <view class="upgrade-sheet">
+        <view class="us-current">
+          <text class="us-cur-label">当前套餐</text>
+          <view class="us-cur-badge badge-basic">普通版</view>
+        </view>
+
+        <view v-if="pendingApp" class="app-pending-tip">
+          <text class="apt-icon">⏳</text>
+          <view>
+            <text class="apt-title">申请已提交，等待管理员审核</text>
+            <text class="apt-sub">申请版本：{{ { 2: '中级版', 3: '高级版' }[pendingApp.targetPkg] || '--' }}</text>
+          </view>
+        </view>
+
+        <template v-else>
+          <text class="app-form-label">选择升级版本 *</text>
+          <view class="us-options">
+            <view class="us-tier-card" :class="{ selected: applyTarget === 2 }" @click="applyTarget = 2">
+              <view class="us-tier-head">
+                <view class="us-tier-badge badge-mid">中级版</view>
+              </view>
+              <view class="us-tier-features">
+                <text class="us-feat">✓ 规则引擎 AI 经营建议</text>
+                <text class="us-feat">✓ 备货 / 排班 / 营销三大类建议</text>
+              </view>
+            </view>
+            <view class="us-tier-card us-tier-card--advanced" :class="{ selected: applyTarget === 3 }" @click="applyTarget = 3">
+              <view class="us-tier-head">
+                <view class="us-tier-badge badge-advanced">高级版</view>
+              </view>
+              <view class="us-tier-features">
+                <text class="us-feat">✓ 包含中级版全部功能</text>
+                <text class="us-feat">✓ AI 大模型个性化建议</text>
+              </view>
+            </view>
+          </view>
+
+          <text class="app-form-label">备注（选填）</text>
+          <textarea class="app-textarea" v-model="applyRemark" placeholder="如有特殊需求可填写备注" maxlength="200" />
+
+          <text class="app-form-label">凭证图片（选填）</text>
+          <view class="app-img-row">
+            <view v-if="applyImageUrl" class="app-img-preview" @click="previewApplyImage">
+              <image :src="applyImageUrl" mode="aspectFill" class="app-img" />
+              <view class="app-img-del" @click.stop="applyImageUrl = ''">✕</view>
+            </view>
+            <view v-else class="app-img-add" @click="chooseApplyImage">
+              <text class="app-img-plus">+</text>
+              <text class="app-img-hint">上传图片</text>
+            </view>
+          </view>
+
+          <button class="btn-apply-submit" :disabled="applySubmitting" @click="submitUpgradeApp">
+            {{ applySubmitting ? '提交中...' : '提交申请' }}
+          </button>
+        </template>
+      </view>
+    </BottomSheet>
 
     <!-- 建议详情弹层 -->
     <BottomSheet
@@ -179,12 +248,12 @@
             class="fb-btn"
             :class="{ done: currentAdvice.feedback === 1 }"
             @click="sendFeedback(currentAdvice, 1)"
-          >{{ currentAdvice.feedback === 1 ? '✅ 已反馈' : '👍 有用' }}</button>
+          >{{ currentAdvice.feedback === 1 ? '✅ 有用' : '👍 有用' }}</button>
           <button
             class="fb-btn fb-neg"
             :class="{ done: currentAdvice.feedback === 2 }"
             @click="sendFeedback(currentAdvice, 2)"
-          >{{ currentAdvice.feedback === 2 ? '✅ 已反馈' : '👎 无用' }}</button>
+          >{{ currentAdvice.feedback === 2 ? '✅ 无用' : '👎 无用' }}</button>
         </view>
       </view>
     </BottomSheet>
@@ -231,7 +300,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import TabBar from '../../components/TabBar.vue'
 import BottomSheet from '../../components/BottomSheet.vue'
 import { statusBarHeight } from '../../utils/system.js'
-import { get, post } from '../../utils/request.js'
+import { get, post, BASE_URL } from '../../utils/request.js'
 
 // ── 类型色彩映射 ──────────────────────────────────────────────
 const typeColorMap = {
@@ -287,13 +356,12 @@ const genMode         = ref('')       // '' | 'today' | 'lastHour'，默认不�
 const dailyRemain     = ref(null)     // null=无限制, 数字=剩余次数
 const rangeAvail      = ref({ today: null, lastHour: null })  // null=加载中
 const currentAdvice   = ref(null)
-const loading         = ref(true)
-const loadingMore     = ref(false)
-const advices  = ref([])
-const page     = ref(1)
-const pageSize = 10
-const total    = ref(0)
-const hasMore  = ref(false)
+const loading     = ref(true)
+const advices     = ref([])
+const page        = ref(1)
+const pageSize    = 10
+const total       = ref(0)
+const totalPages  = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
 
 // ── 套餐信息 ──────────────────────────────────────────────────
 async function fetchPackage() {
@@ -303,8 +371,80 @@ async function fetchPackage() {
   } catch (_) {}
 }
 
-function goUpgrade() {
-  uni.showToast({ title: '请联系管理员升级套餐', icon: 'none', duration: 2500 })
+// ── 升级套餐申请 ─────────────────────────────────────────────
+const showUpgradeSheet = ref(false)
+const applyTarget      = ref(0)
+const applyRemark      = ref('')
+const applyImageUrl    = ref('')
+const applyImageLocal  = ref('')
+const applySubmitting  = ref(false)
+const pendingApp       = ref(null)
+
+async function goUpgrade() {
+  applyTarget.value     = 0
+  applyRemark.value     = ''
+  applyImageUrl.value   = ''
+  applyImageLocal.value = ''
+  showUpgradeSheet.value = true
+  try {
+    const data = await get('/api/merchant/package-application/latest', {}, { showLoad: false })
+    pendingApp.value = (data && data.status === 0) ? data : null
+  } catch (_) { pendingApp.value = null }
+}
+
+function chooseApplyImage() {
+  uni.chooseImage({
+    count: 1, sizeType: ['compressed'], sourceType: ['album', 'camera'],
+    success: ({ tempFilePaths }) => {
+      applyImageLocal.value = tempFilePaths[0]
+      applyImageUrl.value   = tempFilePaths[0]
+    }
+  })
+}
+
+function previewApplyImage() {
+  if (applyImageUrl.value) uni.previewImage({ urls: [applyImageUrl.value] })
+}
+
+async function submitUpgradeApp() {
+  if (!applyTarget.value) {
+    uni.showToast({ title: '请选择升级版本', icon: 'none' }); return
+  }
+  applySubmitting.value = true
+  try {
+    let imageUrl = ''
+    if (applyImageLocal.value) {
+      const token = uni.getStorageSync('traffic_token')
+      imageUrl = await new Promise((resolve, reject) => {
+        uni.uploadFile({
+          url: `${BASE_URL}/api/merchant/upload`,
+          filePath: applyImageLocal.value,
+          name: 'file',
+          header: { Authorization: `Bearer ${token}` },
+          success: res => {
+            try {
+              const body = JSON.parse(res.data)
+              if (body.code === 0) resolve(body.data.url)
+              else reject(new Error(body.message))
+            } catch (e) { reject(e) }
+          },
+          fail: reject
+        })
+      })
+    }
+    await post('/api/merchant/package-application', {
+      targetPkg: applyTarget.value,
+      remark:    applyRemark.value.trim() || undefined,
+      imageUrl:  imageUrl || undefined,
+    }, { showLoad: false })
+    uni.showToast({ title: '申请已提交，等待审核', icon: 'success', duration: 2000 })
+    showUpgradeSheet.value = false
+    pendingApp.value = { targetPkg: applyTarget.value, status: 0 }
+  } catch (e) {
+    uni.showToast({ title: e.message || '提交失败', icon: 'none' })
+  } finally {
+    applySubmitting.value = false
+  }
 }
 
 // ── 建议列表 ──────────────────────────────────────────────────
@@ -315,28 +455,44 @@ function enrichItem(item) {
 
 async function fetchList(reset = false) {
   if (packageType.value === 1) { loading.value = false; return }
-  if (reset) { page.value = 1; advices.value = [] }
+  if (reset) page.value = 1
+  loading.value = true
   const params = { page: page.value, size: pageSize }
   if (packageType.value === 3) params.source = sourceTab.value === 1 ? 2 : 1
+  else params.source = 1   // 中级版只看规则引擎建议
   if (activeFilter.value > 0) params.type = filterTypeMap[activeFilter.value]
   try {
-    const data = await get('/api/merchant/advice/list', params, { showLoad: reset })
-    const items = (data.list || []).map(enrichItem)
-    advices.value = reset ? items : [...advices.value, ...items]
+    const data    = await get('/api/merchant/advice/list', params, { showLoad: false })
+    advices.value = (data.list || []).map(enrichItem)
     total.value   = data.total || 0
-    hasMore.value = advices.value.length < total.value
   } catch (_) {
   } finally {
-    loading.value     = false
-    loadingMore.value = false
+    loading.value = false
   }
 }
 
-async function loadMore() {
-  if (loadingMore.value || !hasMore.value) return
-  loadingMore.value = true
+function prevPage() {
+  if (page.value <= 1) return
+  page.value--
+  fetchList(false)
+}
+
+function nextPage() {
+  if (page.value >= totalPages.value) return
   page.value++
-  await fetchList(false)
+  fetchList(false)
+}
+
+function goFirst() {
+  if (page.value <= 1) return
+  page.value = 1
+  fetchList(false)
+}
+
+function goLast() {
+  if (page.value >= totalPages.value) return
+  page.value = totalPages.value
+  fetchList(false)
 }
 
 watch(activeFilter, () => { loading.value = true; fetchList(true) })
@@ -366,10 +522,10 @@ function openDetail(advice) {
 
 
 function sendFeedback(advice, type) {
-  if (advice.feedback) return
-  advice.feedback = type
-  post('/api/merchant/advice/feedback', { id: advice.id, feedback: type }, { showLoad: false }).catch(() => {})
-  uni.showToast({ title: '感谢反馈', icon: 'success' })
+  const newFeedback = advice.feedback === type ? 0 : type
+  advice.feedback = newFeedback
+  post('/api/merchant/advice/feedback', { id: advice.id, feedback: newFeedback }, { showLoad: false }).catch(() => {})
+  uni.showToast({ title: newFeedback === 0 ? '已撤销反馈' : '感谢反馈', icon: 'success' })
 }
 
 async function onFabClick() {
@@ -607,12 +763,31 @@ function generateAdvice() {
 }
 
 /* ── 加载更多 ── */
-.load-more {
-  text-align: center;
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 32rpx;
   padding: 28rpx 0 8rpx;
-  font-size: 24rpx;
+}
+
+.pg-btn {
+  font-size: 26rpx;
   color: #1f4788;
-  &:active { opacity: 0.7; }
+  padding: 8rpx 24rpx;
+  background: #fff;
+  border-radius: 20rpx;
+  border: 1rpx solid #d0d8ee;
+}
+
+.pg-btn.disabled {
+  color: #ccc;
+  border-color: #eee;
+}
+
+.pg-info {
+  font-size: 24rpx;
+  color: #666;
 }
 
 /* ── FAB ── */
@@ -810,4 +985,116 @@ function generateAdvice() {
     }
   }
 }
+
+/* ── 升级套餐弹层 ── */
+.upgrade-sheet { padding-bottom: 8rpx; }
+
+.us-current {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  margin-bottom: 24rpx;
+}
+
+.us-cur-label { font-size: 26rpx; color: #888; }
+
+.us-cur-badge {
+  font-size: 22rpx;
+  padding: 5rpx 18rpx;
+  border-radius: 20rpx;
+  font-weight: 600;
+}
+
+.badge-basic    { background: #f0f0f0; color: #666; }
+.badge-mid      { background: rgba(255,207,64,0.2); color: #7a5200; }
+.badge-advanced { background: linear-gradient(135deg, #ff8a00, #e52e71); color: #fff; }
+
+.us-options { display: flex; flex-direction: column; gap: 16rpx; margin-bottom: 20rpx; }
+
+.us-tier-card {
+  background: #f8f9fc;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  border: 2rpx solid #e8e8e8;
+}
+
+.us-tier-card.selected { border-color: #1f4788; background: #f0f4ff; }
+
+.us-tier-card--advanced.selected { border-color: #e52e71; background: #fff0f5; }
+
+.us-tier-head { display: flex; align-items: center; gap: 16rpx; margin-bottom: 16rpx; }
+
+.us-tier-badge {
+  font-size: 22rpx;
+  padding: 5rpx 18rpx;
+  border-radius: 20rpx;
+  font-weight: 600;
+}
+
+.us-tier-features { display: flex; flex-direction: column; gap: 8rpx; }
+
+.us-feat { font-size: 24rpx; color: #555; }
+
+.app-pending-tip {
+  display: flex;
+  align-items: flex-start;
+  gap: 16rpx;
+  background: #fff8e6;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin: 20rpx 0;
+}
+
+.apt-icon { font-size: 40rpx; }
+.apt-title { display: block; font-size: 28rpx; color: #b07800; font-weight: 600; margin-bottom: 6rpx; }
+.apt-sub   { display: block; font-size: 24rpx; color: #999; }
+
+.app-form-label { display: block; font-size: 26rpx; color: #555; margin: 20rpx 0 10rpx; }
+
+.app-textarea {
+  width: 100%;
+  min-height: 120rpx;
+  background: #f6f7fa;
+  border-radius: 12rpx;
+  padding: 16rpx;
+  font-size: 26rpx;
+  color: #333;
+  box-sizing: border-box;
+}
+
+.app-img-row { display: flex; gap: 16rpx; flex-wrap: wrap; margin-bottom: 24rpx; }
+
+.app-img-preview { width: 160rpx; height: 120rpx; border-radius: 12rpx; overflow: hidden; position: relative; }
+.app-img { width: 100%; height: 100%; }
+.app-img-del {
+  position: absolute; top: 4rpx; right: 4rpx;
+  width: 36rpx; height: 36rpx; border-radius: 18rpx;
+  background: rgba(0,0,0,0.5); color: #fff; font-size: 20rpx;
+  text-align: center; line-height: 36rpx;
+}
+
+.app-img-add {
+  width: 160rpx; height: 120rpx; border-radius: 12rpx;
+  border: 2rpx dashed #ccc;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8rpx;
+}
+
+.app-img-plus { font-size: 48rpx; color: #bbb; line-height: 1; }
+.app-img-hint { font-size: 22rpx; color: #bbb; }
+
+.btn-apply-submit {
+  width: 100%;
+  height: 96rpx;
+  border-radius: 24rpx;
+  background: linear-gradient(135deg, #1a4a8a, #2d6fd6);
+  color: #fff;
+  font-size: 28rpx;
+  font-weight: 600;
+  border: none;
+  line-height: 96rpx;
+  box-sizing: border-box;
+  padding: 0;
+}
+
+.btn-apply-submit[disabled] { background: #c8c9cc; opacity: 1; }
 </style>

@@ -21,7 +21,7 @@
     <scroll-view class="scroll-area" scroll-y>
 
       <!-- 套餐条 -->
-      <view class="pkg-strip" @click="packageType < 3 && (showUpgradeSheet = true)">
+      <view class="pkg-strip" @click="packageType < 3 && openUpgradeSheet()">
         <view class="ps-left">
           <text class="ps-feature">{{ aiFeature }}</text>
           <text class="ps-expire">有效期：{{ pkgExpire }}</text>
@@ -84,19 +84,23 @@
     <TabBar role="merchant" :current="3" />
 
     <!-- 绑定手机号弹层 -->
-    <BottomSheet :show="showPhoneSheet" title="绑定手机号" @close="showPhoneSheet = false">
+    <BottomSheet :show="showPhoneSheet" title="修改手机号" @close="showPhoneSheet = false">
       <view class="form">
+        <view class="phone-tip">
+          <text class="phone-tip-icon">ℹ️</text>
+          <text class="phone-tip-text">手机号同时用于账号登录，修改后请使用新手机号登录</text>
+        </view>
         <view class="form-row">
-          <text class="form-label">手机号</text>
+          <text class="form-label">新手机号</text>
           <input
             class="form-input"
             v-model="phoneInput"
             type="number"
             maxlength="11"
-            placeholder="请输入手机号"
+            placeholder="请输入新手机号"
           />
         </view>
-        <button class="btn-primary" @click="savePhone">确认绑定</button>
+        <button class="btn-primary" @click="savePhone">确认修改</button>
       </view>
     </BottomSheet>
 
@@ -139,47 +143,68 @@
       </view>
     </BottomSheet>
 
-    <!-- 升级弹层 -->
-    <BottomSheet :show="showUpgradeSheet" title="升级套餐" @close="showUpgradeSheet = false">
+    <!-- 升级套餐弹层：选版本 + 申请 -->
+    <BottomSheet :show="showUpgradeSheet" title="申请升级套餐" @close="showUpgradeSheet = false">
       <view class="upgrade-sheet">
-        <!-- 当前套餐 -->
         <view class="us-current">
           <text class="us-cur-label">当前套餐</text>
           <view class="us-cur-badge" :class="pkgBadgeClass">{{ pkgName }}</view>
         </view>
 
-        <!-- 可升级选项 -->
-        <view class="us-options">
-          <!-- 普通版 → 中级版 -->
-          <view v-if="packageType === 1" class="us-tier-card">
-            <view class="us-tier-head">
-              <view class="us-tier-badge badge-mid">中级版</view>
-              <text class="us-tier-price">¥99 / 月</text>
-            </view>
-            <view class="us-tier-features">
-              <text class="us-feat">✓ 规则引擎 AI 经营建议（无限次）</text>
-              <text class="us-feat">✓ 备货 / 排班 / 营销三大类建议</text>
-              <text class="us-feat">✓ 自定义规则配置</text>
-              <text class="us-feat">✓ 最多 15 天自定义日期分析</text>
-            </view>
-            <button class="us-btn" @click="handleUpgrade(2)">升级中级版</button>
-          </view>
-
-          <!-- 普通版 / 中级版 → 高级版 -->
-          <view class="us-tier-card us-tier-card--advanced">
-            <view class="us-tier-head">
-              <view class="us-tier-badge badge-advanced">高级版</view>
-              <text class="us-tier-price">¥299 / 月</text>
-            </view>
-            <view class="us-tier-features">
-              <text class="us-feat">✓ 包含中级版全部功能</text>
-              <text class="us-feat">✓ AI 大模型个性化建议</text>
-              <text class="us-feat">✓ 历史同期对比分析</text>
-              <text class="us-feat">✓ 报表导出</text>
-            </view>
-            <button class="us-btn us-btn--advanced" @click="handleUpgrade(3)">升级高级版</button>
+        <!-- 已有待处理申请 -->
+        <view v-if="pendingApp" class="app-pending-tip">
+          <text class="apt-icon">⏳</text>
+          <view>
+            <text class="apt-title">申请已提交，等待管理员审核</text>
+            <text class="apt-sub">申请版本：{{ { 2: '中级版', 3: '高级版' }[pendingApp.targetPkg] || '--' }}</text>
           </view>
         </view>
+
+        <template v-else>
+          <!-- 选择目标套餐 -->
+          <text class="app-form-label">选择升级版本 *</text>
+          <view class="us-options">
+            <view v-if="packageType === 1" class="us-tier-card" :class="{ selected: applyTarget === 2 }" @click="applyTarget = 2">
+              <view class="us-tier-head">
+                <view class="us-tier-badge badge-mid">中级版</view>
+              </view>
+              <view class="us-tier-features">
+                <text class="us-feat">✓ 规则引擎 AI 经营建议</text>
+                <text class="us-feat">✓ 备货 / 排班 / 营销三大类建议</text>
+              </view>
+            </view>
+            <view class="us-tier-card us-tier-card--advanced" :class="{ selected: applyTarget === 3 }" @click="applyTarget = 3">
+              <view class="us-tier-head">
+                <view class="us-tier-badge badge-advanced">高级版</view>
+              </view>
+              <view class="us-tier-features">
+                <text class="us-feat">✓ 包含中级版全部功能</text>
+                <text class="us-feat">✓ AI 大模型个性化建议</text>
+              </view>
+            </view>
+          </view>
+
+          <!-- 备注（选填） -->
+          <text class="app-form-label">备注（选填）</text>
+          <textarea class="app-textarea" v-model="applyRemark" placeholder="如有特殊需求可填写备注" maxlength="200" />
+
+          <!-- 上传图片（选填） -->
+          <text class="app-form-label">凭证图片（选填）</text>
+          <view class="app-img-row">
+            <view v-if="applyImageUrl" class="app-img-preview" @click="previewApplyImage">
+              <image :src="applyImageUrl" mode="aspectFill" class="app-img" />
+              <view class="app-img-del" @click.stop="applyImageUrl = ''">✕</view>
+            </view>
+            <view v-else class="app-img-add" @click="chooseApplyImage">
+              <text class="app-img-plus">+</text>
+              <text class="app-img-hint">上传图片</text>
+            </view>
+          </view>
+
+          <button class="btn-primary" :disabled="applySubmitting" @click="submitUpgradeApp">
+            {{ applySubmitting ? '提交中...' : '提交申请' }}
+          </button>
+        </template>
       </view>
     </BottomSheet>
   </view>
@@ -191,7 +216,7 @@ import TabBar from '../../components/TabBar.vue'
 import BottomSheet from '../../components/BottomSheet.vue'
 import { useUserStore } from '../../store/user.js'
 import { statusBarHeight } from '../../utils/system.js'
-import { get, post, put } from '../../utils/request.js'
+import { get, post, put, BASE_URL } from '../../utils/request.js'
 
 const { state, login, logout } = useUserStore()
 const userInfo = state.userInfo
@@ -256,22 +281,96 @@ async function fetchStores() {
   } catch (_) {}
 }
 
-function handleUpgrade(targetTier) {
-  showUpgradeSheet.value = false
-  const names = { 2: '中级版', 3: '高级版' }
-  uni.showModal({
-    title: `升级 ${names[targetTier]}`,
-    content: `确认升级到${names[targetTier]}？正式版本将跳转至支付流程，当前为演示模式。`,
-    confirmText: '确认',
-    success: ({ confirm }) => {
-      if (confirm) uni.showToast({ title: '功能开发中，敬请期待', icon: 'none' })
+function openUpgradeSheet() {
+  applyTarget.value     = 0
+  applyRemark.value     = ''
+  applyImageUrl.value   = ''
+  applyImageLocal.value = ''
+  showUpgradeSheet.value = true
+}
+
+// ── 套餐升级申请 ─────────────────────────────────────────────
+const applyTarget     = ref(0)
+const applyRemark     = ref('')
+const applyImageUrl   = ref('')
+const applyImageLocal = ref('')   // 本地路径，用于上传
+const applySubmitting = ref(false)
+const pendingApp      = ref(null) // 已有待处理申请
+
+async function loadPendingApp() {
+  try {
+    const data = await get('/api/merchant/package-application/latest', {}, { showLoad: false })
+    pendingApp.value = (data && data.status === 0) ? data : null
+  } catch (_) {}
+}
+
+function chooseApplyImage() {
+  uni.chooseImage({
+    count: 1,
+    sizeType: ['compressed'],
+    sourceType: ['album', 'camera'],
+    success: ({ tempFilePaths }) => {
+      applyImageLocal.value = tempFilePaths[0]
+      applyImageUrl.value   = tempFilePaths[0]
     }
   })
+}
+
+function previewApplyImage() {
+  if (!applyImageUrl.value) return
+  uni.previewImage({ urls: [applyImageUrl.value] })
+}
+
+async function uploadApplyImage() {
+  if (!applyImageLocal.value) return ''
+  const token = uni.getStorageSync('traffic_token')
+  return new Promise((resolve, reject) => {
+    uni.uploadFile({
+      url: `${BASE_URL}/api/merchant/upload`,
+      filePath: applyImageLocal.value,
+      name: 'file',
+      header: { Authorization: `Bearer ${token}` },
+      success: res => {
+        try {
+          const body = JSON.parse(res.data)
+          if (body.code === 0) resolve(body.data.url)
+          else reject(new Error(body.message))
+        } catch (e) { reject(e) }
+      },
+      fail: reject
+    })
+  })
+}
+
+async function submitUpgradeApp() {
+  if (!applyTarget.value) {
+    uni.showToast({ title: '请选择升级版本', icon: 'none' }); return
+  }
+  applySubmitting.value = true
+  try {
+    let imageUrl = ''
+    if (applyImageLocal.value) {
+      imageUrl = await uploadApplyImage()
+    }
+    await post('/api/merchant/package-application', {
+      targetPkg: applyTarget.value,
+      remark:    applyRemark.value.trim() || undefined,
+      imageUrl:  imageUrl || undefined,
+    }, { showLoad: false })
+    uni.showToast({ title: '申请已提交，等待审核', icon: 'success', duration: 2000 })
+    showUpgradeSheet.value = false
+    await loadPendingApp()
+  } catch (e) {
+    uni.showToast({ title: e.message || '提交失败', icon: 'none' })
+  } finally {
+    applySubmitting.value = false
+  }
 }
 
 onMounted(() => {
   fetchMerchantInfo()
   fetchStores()
+  loadPendingApp()
 })
 
 // ── 绑定/修改手机号 ─────────────────────────────────────────
@@ -614,6 +713,21 @@ function confirmLogout() {
   height: calc(96rpx + env(safe-area-inset-bottom) + 32rpx);
 }
 
+/* ── 手机号提示 ── */
+.phone-tip {
+  display: flex;
+  align-items: flex-start;
+  gap: 10rpx;
+  background: #fff8e6;
+  border-radius: 12rpx;
+  padding: 20rpx;
+  margin-bottom: 20rpx;
+}
+
+.phone-tip-icon { font-size: 28rpx; flex-shrink: 0; }
+
+.phone-tip-text { font-size: 24rpx; color: #b07800; line-height: 1.6; }
+
 /* ── 弹层表单 ── */
 .form {
   .form-row {
@@ -758,4 +872,80 @@ function confirmLogout() {
   &--advanced { background: linear-gradient(135deg, #ff8a00, #e52e71); }
   &::after { display: none; }
 }
+
+/* ── 套餐申请 ── */
+.us-tier-card.selected {
+  border: 2rpx solid #1f4788;
+  background: #f0f4ff;
+}
+
+.app-pending-tip {
+  display: flex;
+  align-items: flex-start;
+  gap: 16rpx;
+  background: #fff8e6;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin: 20rpx 0;
+}
+
+.apt-icon { font-size: 40rpx; }
+
+.apt-title { display: block; font-size: 28rpx; color: #b07800; font-weight: 600; margin-bottom: 6rpx; }
+
+.apt-sub { display: block; font-size: 24rpx; color: #999; }
+
+.app-form-label { display: block; font-size: 26rpx; color: #555; margin: 20rpx 0 10rpx; }
+
+.app-textarea {
+  width: 100%;
+  min-height: 120rpx;
+  background: #f6f7fa;
+  border-radius: 12rpx;
+  padding: 16rpx;
+  font-size: 26rpx;
+  color: #333;
+  box-sizing: border-box;
+}
+
+.app-img-row { display: flex; gap: 16rpx; flex-wrap: wrap; margin-bottom: 16rpx; }
+
+.app-img-preview {
+  width: 160rpx;
+  height: 120rpx;
+  border-radius: 12rpx;
+  overflow: hidden;
+  position: relative;
+}
+
+.app-img { width: 100%; height: 100%; }
+
+.app-img-del {
+  position: absolute;
+  top: 4rpx;
+  right: 4rpx;
+  width: 36rpx;
+  height: 36rpx;
+  border-radius: 18rpx;
+  background: rgba(0,0,0,0.5);
+  color: #fff;
+  font-size: 20rpx;
+  text-align: center;
+  line-height: 36rpx;
+}
+
+.app-img-add {
+  width: 160rpx;
+  height: 120rpx;
+  border-radius: 12rpx;
+  border: 2rpx dashed #ccc;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+}
+
+.app-img-plus { font-size: 48rpx; color: #bbb; line-height: 1; }
+.app-img-hint { font-size: 22rpx; color: #bbb; }
 </style>
