@@ -303,10 +303,30 @@
             <view class="biz-section-label">菜单 / 商品</view>
             <textarea v-model="bizForm.menu" class="note-input"
               placeholder="列出主要商品或分类..." :maxlength="500" />
+            <view class="biz-img-row">
+              <view v-for="(img, idx) in bizForm.menuImages" :key="idx" class="biz-img-item"
+                @click="previewBizImg(img, bizForm.menuImages)">
+                <image :src="img" class="biz-img-thumb" mode="aspectFill" />
+                <view class="biz-img-del" @click.stop="removeBizImg('menu', idx)">✕</view>
+              </view>
+              <view v-if="bizForm.menuImages.length < 3" class="biz-img-add" @click="chooseBizImg('menu')">
+                <text>{{ bizImgUploading ? '上传中' : '+' }}</text>
+              </view>
+            </view>
 
             <view class="biz-section-label">当期促销活动</view>
             <textarea v-model="bizForm.promotions" class="note-input"
               placeholder="例：满30减5，学生证9折..." :maxlength="300" />
+            <view class="biz-img-row">
+              <view v-for="(img, idx) in bizForm.promotionImages" :key="idx" class="biz-img-item"
+                @click="previewBizImg(img, bizForm.promotionImages)">
+                <image :src="img" class="biz-img-thumb" mode="aspectFill" />
+                <view class="biz-img-del" @click.stop="removeBizImg('promotion', idx)">✕</view>
+              </view>
+              <view v-if="bizForm.promotionImages.length < 3" class="biz-img-add" @click="chooseBizImg('promotion')">
+                <text>{{ bizImgUploading ? '上传中' : '+' }}</text>
+              </view>
+            </view>
 
             <view class="biz-section-label">营业时间</view>
             <textarea v-model="bizForm.businessHours" class="note-input"
@@ -374,11 +394,23 @@
           <text class="form-label">营业执照号（选填）</text>
           <input v-model="form.license" class="form-input" placeholder="请输入营业执照号" />
         </view>
+        <!-- 门店实拍图（必传） -->
+        <view class="form-item">
+          <text class="form-label">门店实拍图 *</text>
+          <view v-if="form.storePhotoUrl" class="store-photo-preview" @click="previewStorePhoto">
+            <image :src="toFullUrl(form.storePhotoUrl)" class="store-photo-img" mode="aspectFill" />
+            <view class="store-photo-change" @click.stop="chooseStorePhoto">重新拍摄</view>
+          </view>
+          <view v-else class="btn-store-photo" @click="chooseStorePhoto">
+            <text class="store-photo-icon">📷</text>
+            <text class="store-photo-text">{{ storePhotoUploading ? '上传中...' : '拍摄或上传门店照片' }}</text>
+          </view>
+        </view>
         <view class="form-item">
           <text class="form-label">备注（选填）</text>
           <textarea v-model="form.remark" class="form-textarea" placeholder="记录初次跟进情况..." :maxlength="200" />
         </view>
-        <button class="btn-submit" @click="submitAdd">确认添加</button>
+        <button class="btn-submit" @click="submitAdd" :disabled="storePhotoUploading">确认添加</button>
       </view>
     </BottomSheet>
   </view>
@@ -410,10 +442,11 @@ const joinRequests = ref([])  // 收到的联合跟进申请
 const activePanel = ref(null)   // 'info' | 'status' | 'record' | null
 
 // ─── 门店信息面板 ────────────────────────────────────────────
-const bizForm     = ref({ businessType: '', menu: '', promotions: '', businessHours: '', targetAudience: '' })
+const bizForm     = ref({ businessType: '', menu: '', promotions: '', businessHours: '', targetAudience: '', menuImages: [], promotionImages: [] })
 const bizCustomType = ref('')
 const bizLoading  = ref(false)
 const bizSaving   = ref(false)
+const bizImgUploading = ref(false)
 const businessTypes = [
   { value: '餐饮', label: '🍜 餐饮' },
   { value: '商超', label: '🛒 商超' },
@@ -444,26 +477,82 @@ async function loadBizInfo(merchantId) {
       const isPreset = businessTypes.some(t => t.value !== '其他' && t.value === bt)
       bizCustomType.value = isPreset ? '' : bt
       bizForm.value = {
-        businessType:  bt,
-        menu:          data.menu          || '',
-        promotions:    data.promotions    || '',
-        businessHours: data.businessHours || '',
+        businessType:   bt,
+        menu:           data.menu           || '',
+        promotions:     data.promotions     || '',
+        businessHours:  data.businessHours  || '',
         targetAudience: data.targetAudience || '',
+        menuImages:     (data.menuImages     || []).map(u => toFullUrl(u)),
+        promotionImages:(data.promotionImages || []).map(u => toFullUrl(u)),
       }
     }
   } catch (_) {}
   bizLoading.value = false
 }
 
+function toRelUrl(url) {
+  if (!url) return url
+  return url.startsWith(BASE_URL) ? url.slice(BASE_URL.length) : url
+}
+
 async function saveBizInfo() {
   bizSaving.value = true
   try {
-    await put(`/api/salesman/merchant/${currentItem.value.merchantId}/business-info`, bizForm.value)
+    await put(`/api/salesman/merchant/${currentItem.value.merchantId}/business-info`, {
+      ...bizForm.value,
+      menuImages:      bizForm.value.menuImages.map(toRelUrl),
+      promotionImages: bizForm.value.promotionImages.map(toRelUrl),
+    })
     uni.showToast({ title: '保存成功', icon: 'success' })
   } catch (_) {
     uni.showToast({ title: '保存失败', icon: 'none' })
   }
   bizSaving.value = false
+}
+
+function bizImgArr(target) {
+  return target === 'menu' ? bizForm.value.menuImages : bizForm.value.promotionImages
+}
+
+function chooseBizImg(target) {
+  if (bizImgUploading.value) return
+  if (bizImgArr(target).length >= 3) { uni.showToast({ title: '最多上传3张', icon: 'none' }); return }
+  uni.chooseImage({
+    count: 1,
+    sizeType: ['compressed'],
+    sourceType: ['album', 'camera'],
+    success: (res) => { uploadBizImg(res.tempFilePaths[0], target) }
+  })
+}
+
+function uploadBizImg(tempPath, target) {
+  bizImgUploading.value = true
+  uni.uploadFile({
+    url: `${BASE_URL}/api/salesman/upload`,
+    filePath: tempPath,
+    name: 'file',
+    header: { Authorization: `Bearer ${getToken()}` },
+    success: (res) => {
+      try {
+        const body = JSON.parse(res.data)
+        if (body.code !== 0) throw new Error(body.message || '上传失败')
+        bizImgArr(target).push(toFullUrl(body.data.url))
+        uni.showToast({ title: '上传成功', icon: 'success' })
+      } catch (e) {
+        uni.showToast({ title: e.message || '上传失败', icon: 'none' })
+      }
+    },
+    fail: () => uni.showToast({ title: '上传失败，请检查网络', icon: 'none' }),
+    complete: () => { bizImgUploading.value = false }
+  })
+}
+
+function removeBizImg(target, idx) {
+  bizImgArr(target).splice(idx, 1)
+}
+
+function previewBizImg(url, list) {
+  uni.previewImage({ urls: list.map(u => toFullUrl(u)), current: toFullUrl(url) })
 }
 
 // ─── 更改信息面板 ────────────────────────────────────────────
@@ -857,11 +946,55 @@ function uploadImage(tempPath, target) {
 }
 
 // ─── 新增商家 ────────────────────────────────────────────────
-const form = ref({ name: '', contact: '', phone: '', address: '', license: '', remark: '', status: 1 })
+const form = ref({ name: '', contact: '', phone: '', address: '', license: '', storePhotoUrl: '', remark: '', status: 1 })
+const storePhotoUploading = ref(false)
+
+function chooseStorePhoto() {
+  if (storePhotoUploading.value) return
+  uni.chooseImage({
+    count: 1,
+    sizeType: ['compressed'],
+    sourceType: ['album', 'camera'],
+    success: (res) => { uploadStorePhoto(res.tempFilePaths[0]) }
+  })
+}
+
+function uploadStorePhoto(tempPath) {
+  storePhotoUploading.value = true
+  uni.uploadFile({
+    url: `${BASE_URL}/api/salesman/upload`,
+    filePath: tempPath,
+    name: 'file',
+    header: { Authorization: `Bearer ${getToken()}` },
+    success: (res) => {
+      try {
+        const body = JSON.parse(res.data)
+        if (body.code !== 0) throw new Error(body.message || '上传失败')
+        form.value.storePhotoUrl = body.data.url
+        uni.showToast({ title: '上传成功', icon: 'success' })
+      } catch (e) {
+        uni.showToast({ title: e.message || '上传失败', icon: 'none' })
+      }
+    },
+    fail: () => uni.showToast({ title: '上传失败，请检查网络', icon: 'none' }),
+    complete: () => { storePhotoUploading.value = false }
+  })
+}
+
+function previewStorePhoto() {
+  if (form.value.storePhotoUrl) {
+    const full = toFullUrl(form.value.storePhotoUrl)
+    uni.previewImage({ urls: [full], current: full })
+  }
+}
 
 async function submitAdd() {
   if (!form.value.name || !form.value.contact || !form.value.phone || !form.value.address) {
     uni.showToast({ title: '请填写所有必填项', icon: 'none' })
+    return
+  }
+  if (!form.value.storePhotoUrl) {
+    uni.showToast({ title: '请上传门店实拍图', icon: 'none' })
     return
   }
 
@@ -933,7 +1066,7 @@ async function checkLicenseAndAdd() {
 }
 
 function resetForm() {
-  form.value = { name: '', contact: '', phone: '', address: '', license: '', remark: '', status: 1 }
+  form.value = { name: '', contact: '', phone: '', address: '', license: '', storePhotoUrl: '', remark: '', status: 1 }
 }
 
 async function doAdd() {
@@ -944,6 +1077,7 @@ async function doAdd() {
       contactPhone: form.value.phone,
       address: form.value.address,
       licenseNo: form.value.license || undefined,
+      storePhotoUrl: form.value.storePhotoUrl,
       remark: form.value.remark || undefined,
       status: form.value.status
     })
@@ -1657,6 +1791,41 @@ onMounted(() => {
     }
   }
 
+  .btn-store-photo {
+    width: 100%;
+    height: 160rpx;
+    border-radius: 20rpx;
+    border: 2rpx dashed #2d6fd6;
+    background: #f0f5ff;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12rpx;
+    box-sizing: border-box;
+
+    .store-photo-icon { font-size: 48rpx; }
+    .store-photo-text { font-size: 26rpx; color: #2d6fd6; font-weight: 500; }
+  }
+
+  .store-photo-preview {
+    position: relative;
+    border-radius: 20rpx;
+    overflow: hidden;
+
+    .store-photo-img { width: 100%; height: 320rpx; display: block; }
+
+    .store-photo-change {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      background: rgba(0, 0, 0, 0.45);
+      color: #fff;
+      font-size: 26rpx;
+      text-align: center;
+      padding: 14rpx;
+    }
+  }
+
   .btn-submit {
     width: 100%;
     height: 96rpx;
@@ -1671,5 +1840,55 @@ onMounted(() => {
     box-sizing: border-box;
     padding: 0;
   }
+}
+
+/* 门店信息图片网格 */
+.biz-img-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  margin: 12rpx 0 8rpx;
+}
+
+.biz-img-item {
+  position: relative;
+  width: 160rpx;
+  height: 160rpx;
+  border-radius: 16rpx;
+  overflow: hidden;
+
+  .biz-img-thumb {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  .biz-img-del {
+    position: absolute;
+    top: 6rpx;
+    right: 6rpx;
+    width: 40rpx;
+    height: 40rpx;
+    border-radius: 20rpx;
+    background: rgba(0, 0, 0, 0.5);
+    color: #fff;
+    font-size: 20rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+.biz-img-add {
+  width: 160rpx;
+  height: 160rpx;
+  border-radius: 16rpx;
+  border: 2rpx dashed #c8d0e0;
+  background: #f4f6fa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 52rpx;
+  color: #aaa;
 }
 </style>

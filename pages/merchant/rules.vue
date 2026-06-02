@@ -4,9 +4,9 @@
       <view :style="{ height: statusBarHeight + 'px' }" />
       <view class="nav-bar">
         <view class="back-btn" @click="goBack">‹</view>
-        <view class="header-title">规则管理</view>
+        <view class="header-title">提醒建议</view>
       </view>
-      <view class="header-sub">配置经营建议触发规则</view>
+      <view class="header-sub">配置触发提醒建议的条件</view>
     </view>
 
     <!-- 内置规则 -->

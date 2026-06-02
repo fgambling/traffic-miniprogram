@@ -34,7 +34,7 @@
       <view class="menu-card">
         <!-- 切换门店 -->
         <view class="menu-row" @click="openStoreSheet">
-          <text class="menu-icon">🏪</text>
+          <text class="menu-icon">🏬</text>
           <text class="menu-label">切换门店</text>
           <text class="menu-val">{{ storeName }}</text>
           <text class="menu-arrow">›</text>
@@ -42,29 +42,29 @@
 
         <!-- 门店信息 -->
         <view class="menu-row" @click="goIfAdv('/pages/merchant/business-info')">
-          <text class="menu-icon">🍽️</text>
+          <text class="menu-icon">📋</text>
           <text class="menu-label">门店信息</text>
           <text class="menu-val">菜单 · 促销 · 客群</text>
           <text class="menu-arrow">›</text>
         </view>
 
-        <!-- 规则配置 -->
+        <!-- 提醒建议 -->
         <view class="menu-row" @click="goIfMid('/pages/merchant/rules')">
-          <text class="menu-icon">⚙️</text>
-          <text class="menu-label">规则配置</text>
+          <text class="menu-icon">🔔</text>
+          <text class="menu-label">提醒建议</text>
           <text class="menu-arrow">›</text>
         </view>
 
         <view class="menu-divider" />
 
         <view class="menu-row" @click="showPhoneSheet = true">
-          <text class="menu-icon">📱</text>
+          <text class="menu-icon">📞</text>
           <text class="menu-label">手机号</text>
           <text class="menu-val">{{ phoneMasked }}</text>
           <text class="menu-arrow">›</text>
         </view>
         <view class="menu-row" @click="openPwdSheet">
-          <text class="menu-icon">🔒</text>
+          <text class="menu-icon">🔑</text>
           <text class="menu-label">修改密码</text>
           <text class="menu-arrow">›</text>
         </view>

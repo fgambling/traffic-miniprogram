@@ -6,7 +6,7 @@
         <view class="back-btn" @click="uni.navigateBack()">‹</view>
         <view class="header-title">门店信息</view>
       </view>
-      <view class="header-sub">录入后 AI 可生成更精准的经营建议</view>
+      <view class="header-sub">详细提供以下内容，开财AI会给出更精准经营建议</view>
     </view>
 
     <scroll-view scroll-y class="scroll-area" v-if="!loading">
@@ -14,7 +14,7 @@
       <!-- 店铺业态 -->
       <view class="section-card">
         <view class="section-head">🏪 店铺业态</view>
-        <view class="section-tip">选择最符合您店铺的行业类型，帮助 AI 生成更精准建议</view>
+        <view class="section-tip">选择行业，开财AI为你提供更精准的经营建议</view>
         <view class="type-grid">
           <view
             v-for="t in businessTypes"
@@ -36,7 +36,7 @@
 
       <view class="section-card">
         <view class="section-head">🍽️ 菜单 / 商品</view>
-        <view class="section-tip">列出主要商品或分类，AI 会结合客流数据给出备货建议</view>
+        <view class="section-tip">现阶段主推产品或服务，开财AI结合客流给出备货建议</view>
         <textarea
           v-model="form.menu"
           class="big-input"
@@ -44,11 +44,26 @@
           :maxlength="500"
         />
         <view class="char-count">{{ (form.menu || '').length }}/500</view>
+        <view class="img-row">
+          <view
+            v-for="(url, i) in form.menuImages"
+            :key="url + i"
+            class="img-preview"
+            @click="previewImg(url)"
+          >
+            <image :src="url" mode="aspectFill" class="img-thumb" />
+            <view class="img-del" @click.stop="removeImg('menu', i)">✕</view>
+          </view>
+          <view v-if="form.menuImages.length < 3" class="img-add" @click="chooseImg('menu')">
+            <text class="img-plus">+</text>
+            <text class="img-hint">图片</text>
+          </view>
+        </view>
       </view>
 
       <view class="section-card">
         <view class="section-head">🎁 当期促销活动</view>
-        <view class="section-tip">填写正在进行的活动，AI 会据此优化营销建议</view>
+        <view class="section-tip">当期在进行什么促销活动？开财AI帮你优化营销活动</view>
         <textarea
           v-model="form.promotions"
           class="big-input"
@@ -56,6 +71,21 @@
           :maxlength="300"
         />
         <view class="char-count">{{ (form.promotions || '').length }}/300</view>
+        <view class="img-row">
+          <view
+            v-for="(url, i) in form.promotionImages"
+            :key="url + i"
+            class="img-preview"
+            @click="previewImg(url)"
+          >
+            <image :src="url" mode="aspectFill" class="img-thumb" />
+            <view class="img-del" @click.stop="removeImg('promotions', i)">✕</view>
+          </view>
+          <view v-if="form.promotionImages.length < 3" class="img-add" @click="chooseImg('promotions')">
+            <text class="img-plus">+</text>
+            <text class="img-hint">图片</text>
+          </view>
+        </view>
       </view>
 
       <view class="section-card">
@@ -70,7 +100,7 @@
 
       <view class="section-card">
         <view class="section-head">👥 目标客群</view>
-        <view class="section-tip">描述你的主要顾客群体，有助于 AI 精准推荐策略</view>
+        <view class="section-tip">你想要的主要顾客群体是哪些？开财AI帮你出策略</view>
         <textarea
           v-model="form.targetAudience"
           class="big-input"
@@ -95,11 +125,14 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { statusBarHeight } from '../../utils/system.js'
-import { get, put } from '../../utils/request.js'
+import { get, put, BASE_URL } from '../../utils/request.js'
 
 const loading = ref(true)
 const saving  = ref(false)
-const form    = reactive({ businessType: '', menu: '', promotions: '', businessHours: '', targetAudience: '' })
+const form    = reactive({
+  businessType: '', menu: '', promotions: '', businessHours: '', targetAudience: '',
+  menuImages: [], promotionImages: []
+})
 
 const businessTypes = [
   { value: '餐饮', label: '🍜 餐饮' },
@@ -145,13 +178,75 @@ async function load() {
         selectedTypeTag.value = '其他'
         customType.value      = bt
       }
-      form.menu           = data.menu           || ''
-      form.promotions     = data.promotions     || ''
-      form.businessHours  = data.businessHours  || ''
-      form.targetAudience = data.targetAudience || ''
+      form.menu             = data.menu             || ''
+      form.promotions       = data.promotions       || ''
+      form.businessHours    = data.businessHours    || ''
+      form.targetAudience   = data.targetAudience   || ''
+      form.menuImages       = (data.menuImages      || []).map(normalizeUrl)
+      form.promotionImages  = (data.promotionImages || []).map(normalizeUrl)
     }
   } catch (_) {}
   loading.value = false
+}
+
+// ── 图片上传 ──────────────────────────────────────────────────
+// 将相对路径（/uploads/...）补全为完整 HTTP URL，小程序 <image> 不认识相对路径
+function normalizeUrl(url) {
+  if (!url) return url
+  return url.startsWith('/') ? BASE_URL + url : url
+}
+
+async function uploadImg(filePath) {
+  const token = uni.getStorageSync('traffic_token')
+  return new Promise((resolve, reject) => {
+    uni.uploadFile({
+      url: `${BASE_URL}/api/merchant/upload`,
+      filePath,
+      name: 'file',
+      header: { Authorization: `Bearer ${token}` },
+      success: res => {
+        try {
+          const body = JSON.parse(res.data)
+          if (body.code === 0) resolve(normalizeUrl(body.data.url))
+          else reject(new Error(body.message))
+        } catch (e) { reject(e) }
+      },
+      fail: reject
+    })
+  })
+}
+
+function chooseImg(target) {
+  const arr = target === 'menu' ? form.menuImages : form.promotionImages
+  if (arr.length >= 3) {
+    uni.showToast({ title: '最多上传3张', icon: 'none' }); return
+  }
+  uni.chooseImage({
+    count: 1,
+    sizeType: ['compressed'],
+    sourceType: ['album', 'camera'],
+    success: async ({ tempFilePaths }) => {
+      uni.showLoading({ title: '上传中...', mask: true })
+      try {
+        const url = await uploadImg(tempFilePaths[0])
+        if (target === 'menu') form.menuImages.push(url)
+        else form.promotionImages.push(url)
+      } catch (_) {
+        uni.showToast({ title: '上传失败，请重试', icon: 'none' })
+      } finally {
+        uni.hideLoading()
+      }
+    }
+  })
+}
+
+function removeImg(target, idx) {
+  if (target === 'menu') form.menuImages.splice(idx, 1)
+  else form.promotionImages.splice(idx, 1)
+}
+
+function previewImg(url) {
+  uni.previewImage({ urls: [url] })
 }
 
 async function save() {
@@ -298,5 +393,55 @@ onMounted(load)
   justify-content: center;
   color: #ccc;
   font-size: 28rpx;
+}
+
+/* ── 图片上传 ── */
+.img-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+  margin-top: 16rpx;
+}
+
+.img-preview {
+  width: 148rpx;
+  height: 116rpx;
+  border-radius: 12rpx;
+  overflow: hidden;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.img-thumb { width: 100%; height: 100%; display: block; }
+
+.img-del {
+  position: absolute;
+  top: 4rpx;
+  right: 4rpx;
+  width: 36rpx;
+  height: 36rpx;
+  border-radius: 18rpx;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  font-size: 20rpx;
+  text-align: center;
+  line-height: 36rpx;
+}
+
+.img-add {
+  width: 148rpx;
+  height: 116rpx;
+  border-radius: 12rpx;
+  border: 2rpx dashed #ccc;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+  flex-shrink: 0;
+  &:active { opacity: 0.7; }
+
+  .img-plus { font-size: 44rpx; color: #bbb; line-height: 1; }
+  .img-hint { font-size: 20rpx; color: #bbb; }
 }
 </style>

@@ -40,25 +40,33 @@
           <text class="date-range-tag" :class="{ 'tag-warn': dayCount >= maxDays }">{{ dayCount }}天</text>
           <text class="date-limit-tip">最多{{ maxDays }}天</text>
         </template>
-        <!-- 周/月Tab：固定范围，只显示说明 -->
+        <!-- 月Tab：选择月份范围（最多12个月） -->
         <template v-else>
-          <text class="date-fixed">{{ chartTitle }}</text>
+          <picker mode="date" fields="month" :value="monthStart" :end="monthEnd" @change="onMonthStartChange">
+            <view class="date-btn">{{ monthStart }}</view>
+          </picker>
+          <text class="date-sep">—</text>
+          <picker mode="date" fields="month" :value="monthEnd" :start="monthStart" :end="todayMonth" @change="onMonthEndChange">
+            <view class="date-btn">{{ monthEnd }}</view>
+          </picker>
+          <text class="date-range-tag" :class="{ 'tag-warn': monthCount >= 12 }">{{ monthCount }}个月</text>
+          <text class="date-limit-tip">最多12个月</text>
         </template>
       </view>
 
       <!-- 摘要行 -->
       <view class="summary-row">
         <view class="summary-item">
-          <view class="si-val">{{ loading ? '…' : summary.total }}</view>
-          <view class="si-label">总人数</view>
+          <view class="si-val">{{ loading ? '…' : summary.total }}<text v-if="!loading" class="si-unit">人</text></view>
+          <view class="si-label">总客流</view>
         </view>
         <view class="summary-item">
-          <view class="si-val">{{ loading ? '…' : summary.avg }}</view>
+          <view class="si-val">{{ loading ? '…' : summary.avg }}<text v-if="!loading" class="si-unit">人</text></view>
           <view class="si-label">{{ avgLabel }}</view>
         </view>
         <view class="summary-item">
-          <view class="si-val">{{ loading ? '…' : summary.peak }}</view>
-          <view class="si-label">峰值时段</view>
+          <view class="si-val">{{ loading ? '…' : summary.peak }}<text v-if="!loading && summary.peak !== '--' && peakUnit" class="si-unit">{{ peakUnit }}</text></view>
+          <view class="si-label">{{ peakLabel }}</view>
         </view>
       </view>
 
@@ -98,25 +106,35 @@
           <text class="placeholder-text">暂无数据</text>
         </view>
         <!-- ②③⑤ 折线图，带峰值标注、对比线、横向滚动 -->
-        <UniChart
-          v-else
-          canvas-id="chart-trend"
-          type="line"
-          :data="chartData"
-          :labels="chartLabels"
-          :compare-data="showCompare ? compareChartData : []"
-          :show-peak="true"
-          :scrollable="activeTab === 1"
-          :scroll-threshold="14"
-          :point-w="44"
-          :height="320"
-          @line-touch="onLineTouch"
-          @line-release="onLineRelease"
-        />
-
+        <template v-else>
+          <UniChart
+            :key="'trend-' + activeTab"
+            :canvas-id="'chart-trend-' + activeTab"
+            type="line"
+            :data="chartData"
+            :labels="chartLabels"
+            :compare-data="showCompare ? compareChartData : []"
+            :show-peak="true"
+            :show-y-axis="true"
+            :y-unit="'人'"
+            :scrollable="activeTab === 1 || (activeTab === 2 && monthCount > 6)"
+            :scroll-threshold="activeTab === 2 ? 6 : 14"
+            :point-w="44"
+            :height="320"
+            @line-touch="onLineTouch"
+            @line-release="onLineRelease"
+          />
+          <view class="chart-axis-hint">
+            <text>↑ 进店人数（人）</text>
+            <text>{{ activeTab === 0 ? '时段（时）' : activeTab === 1 ? '日期' : '月份' }} →</text>
+          </view>
+        </template>
 
         <view v-if="chartData.length > 0 && selectedIdx === null" class="chart-hint">
-          点击折线数据点查看该时段客群画像
+          <text class="chart-hint-icon">👆</text> 点击图中点位可切换时段，查看对应客群画像
+        </view>
+        <view v-if="selectedIdx !== null" class="chart-hint chart-hint--active">
+          <text class="chart-hint-icon">📍</text> 当前查看：{{ selectedLabel }} · 点击其他点位切换
         </view>
       </view>
 
@@ -251,6 +269,24 @@
               </view>
             </view>
           </template>
+
+          <!-- AI 客群洞察 -->
+          <view class="insight-wrap">
+            <template v-if="!profileInsight">
+              <button class="insight-btn" :disabled="insightLoading" @click="generateInsight">
+                {{ insightLoading ? '分析中…' : 'AI 客群分析' }}
+              </button>
+            </template>
+            <template v-else>
+              <view class="insight-box">
+                <view class="insight-box-hd">
+                  <text class="insight-box-title">✨ AI 客群洞察</text>
+                  <text class="insight-box-close" @click="profileInsight = null">✕</text>
+                </view>
+                <text class="insight-box-content">{{ profileInsight }}</text>
+              </view>
+            </template>
+          </view>
         </view>
 
         <!-- 停留时长分析 Card（独立卡片，与画像并列；月 Tab 不显示） -->
@@ -296,18 +332,6 @@
           <view v-else-if="stayLoading" class="stay-empty">加载中…</view>
           <view v-else class="stay-empty">暂无停留分布数据</view>
 
-          <!-- 平均停留趋势（仅当有多个数据点时显示） -->
-          <template v-if="stayTrendData.length > 1">
-            <view class="stay-trend-title">平均停留趋势（分钟）</view>
-            <UniChart
-              canvas-id="chart-stay-trend"
-              type="line"
-              :data="stayTrendData"
-              :labels="stayTrendLabels"
-              :height="200"
-              :draw-delay="200"
-            />
-          </template>
         </view>
         </template>
       </template>
@@ -350,7 +374,7 @@ import { ref, computed, onMounted } from 'vue'
 import TabBar from '../../components/TabBar.vue'
 import UniChart from '../../components/UniChart.vue'
 import { statusBarHeight } from '../../utils/system.js'
-import { get, BASE_URL } from '../../utils/request.js'
+import { get, post, BASE_URL } from '../../utils/request.js'
 import { getToken } from '../../utils/auth.js'
 
 // ── 日期工具 ─────────────────────────────────────────────────
@@ -360,14 +384,24 @@ function toISO(d) {
 function nDaysAgo(n) {
   const d = new Date(); d.setDate(d.getDate() - n); return toISO(d)
 }
-const todayStr = toISO(new Date())
+function toYearMonth(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`
+}
+function nMonthsAgo(n) {
+  const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - n); return toYearMonth(d)
+}
+function lastDayOfMonth(ym) {
+  const [y, m] = ym.split('-').map(Number)
+  return `${ym}-${String(new Date(y, m, 0).getDate()).padStart(2,'0')}`
+}
+const todayStr   = toISO(new Date())
+const todayMonth = toYearMonth(new Date())
 
 // ── Tab 定义 ──────────────────────────────────────────────────
 const tabs = [
-  { label: '小时', type: 'hour'  },
-  { label: '日',   type: 'day'   },
-  { label: '周',   type: 'week'  },
-  { label: '月',   type: 'month' }
+  { label: '当日', type: 'hour'  },
+  { label: '近七天', type: 'day'   },
+  { label: '近六月', type: 'month' }
 ]
 
 // ── 状态 ──────────────────────────────────────────────────────
@@ -382,6 +416,8 @@ const trendPoints      = ref([])
 const selectedDate = ref(todayStr)       // 小时Tab：看哪天
 const dateStart    = ref(nDaysAgo(6))    // 日Tab：开始
 const dateEnd      = ref(todayStr)       // 日Tab：结束
+const monthStart   = ref(nMonthsAgo(5)) // 月Tab：开始月（默认近6个月）
+const monthEnd     = ref(todayMonth)     // 月Tab：结束月
 
 // ② 对比线
 const showCompare    = ref(false)
@@ -393,6 +429,8 @@ const compareDate = ref(nDaysAgo(1))   // 选中的对比日期，默认昨日
 const selectedIdx     = ref(null)
 const profileLoading  = ref(false)
 const selectedProfile = ref(null)
+const insightLoading  = ref(false)
+const profileInsight  = ref(null)
 
 // 导出
 const navBarStyle     = ref({})
@@ -413,6 +451,13 @@ const dayCount = computed(() => {
   return Math.round(ms / 86400000) + 1
 })
 
+const monthCount = computed(() => {
+  if (!monthStart.value || !monthEnd.value) return 0
+  const [sy, sm] = monthStart.value.split('-').map(Number)
+  const [ey, em] = monthEnd.value.split('-').map(Number)
+  return (ey - sy) * 12 + (em - sm) + 1
+})
+
 
 // ── 数据加载 ─────────────────────────────────────────────────
 async function loadTrend() {
@@ -430,8 +475,10 @@ async function loadTrend() {
   } else if (type === 'day') {
     params.start = dateStart.value
     params.end   = dateEnd.value
+  } else if (type === 'month') {
+    params.start = monthStart.value + '-01'
+    params.end   = lastDayOfMonth(monthEnd.value)
   }
-  // week/month：不传 start/end，后端使用默认回溯
 
   try {
     const data = await get('/api/merchant/trend', params)
@@ -449,10 +496,12 @@ function switchTab(i) {
   activeTab.value = i
   showCompare.value = false
   comparePoints.value = []
-  // 重置日Tab日期到默认
   if (i === 1) {
     dateStart.value = nDaysAgo(6)
     dateEnd.value   = todayStr
+  } else if (i === 2) {
+    monthStart.value = nMonthsAgo(5)
+    monthEnd.value   = todayMonth
   }
   loadTrend()
 }
@@ -499,6 +548,30 @@ function onDayEndChange(e) {
     return
   }
   dateEnd.value = newEnd
+  loadTrend()
+}
+
+function onMonthStartChange(e) {
+  const newStart = e.detail.value
+  const [sy, sm] = newStart.split('-').map(Number)
+  const [ey, em] = monthEnd.value.split('-').map(Number)
+  if ((ey - sy) * 12 + (em - sm) + 1 > 12) {
+    uni.showToast({ title: '最多可选12个月', icon: 'none', duration: 2000 })
+    return
+  }
+  monthStart.value = newStart
+  loadTrend()
+}
+
+function onMonthEndChange(e) {
+  const newEnd = e.detail.value
+  const [sy, sm] = monthStart.value.split('-').map(Number)
+  const [ey, em] = newEnd.split('-').map(Number)
+  if ((ey - sy) * 12 + (em - sm) + 1 > 12) {
+    uni.showToast({ title: '最多可选12个月', icon: 'none', duration: 2000 })
+    return
+  }
+  monthEnd.value = newEnd
   loadTrend()
 }
 
@@ -600,7 +673,7 @@ function formatLabel(label) {
     case 'day':
     case 'week': {
       const m = label.match(/\d{4}-(\d{2})-(\d{2})/)
-      return m ? `${parseInt(m[1])}/${parseInt(m[2])}` : label
+      return m ? `${parseInt(m[1])}/${parseInt(m[2])}号` : label
     }
     case 'month': {
       const m = label.match(/\d{4}-(\d{2})/)
@@ -616,11 +689,15 @@ const chartData   = computed(() =>
     ? unifiedHourSlots.value.map(s => s.main)
     : trendPoints.value.map(p => p.enterCount)
 )
-const chartLabels = computed(() =>
-  unifiedHourSlots.value
-    ? unifiedHourSlots.value.map(s => s.label)
-    : trendPoints.value.map(p => formatLabel(p.timeLabel))
-)
+const chartLabels = computed(() => {
+  const isHour = tabs[activeTab.value].type === 'hour'
+  if (unifiedHourSlots.value)
+    return unifiedHourSlots.value.map(s => isHour ? s.label + ':00' : s.label)
+  return trendPoints.value.map(p => {
+    const lbl = formatLabel(p.timeLabel)
+    return isHour ? lbl + ':00' : lbl
+  })
+})
 
 const chartTitle = computed(() => {
   const map = {
@@ -639,7 +716,17 @@ const summary = computed(() => {
   const total = pts.reduce((s, p) => s + p.enterCount, 0)
   const avg   = Math.round(total / pts.length)
   const maxPt = pts.reduce((a, b) => b.enterCount > a.enterCount ? b : a, pts[0])
-  return { total, avg, peak: formatLabel(maxPt.timeLabel) }
+  let peak
+  if (tabs[activeTab.value].type === 'hour') {
+    const h = parseInt(maxPt.timeLabel?.split(' ')[1] ?? '0')
+    peak = `${h}-${h + 1}点`
+  } else if (tabs[activeTab.value].type === 'day') {
+    const m = maxPt.timeLabel?.match(/\d{4}-(\d{2})-(\d{2})/)
+    peak = m ? `${parseInt(m[1])}/${parseInt(m[2])}日` : formatLabel(maxPt.timeLabel)
+  } else {
+    peak = formatLabel(maxPt.timeLabel)
+  }
+  return { total, avg, peak }
 })
 
 const avgLabel = computed(() => {
@@ -647,12 +734,20 @@ const avgLabel = computed(() => {
   return map[tabs[activeTab.value].type] || '均值'
 })
 
+const peakLabel = computed(() => {
+  const map = { hour: '峰值时段', day: '峰值日', week: '峰值周', month: '峰值月' }
+  return map[tabs[activeTab.value].type] || '峰值'
+})
+
+const peakUnit = computed(() => '')
+
 // ── 折线点击 → 并行加载画像 + 停留分析 ──────────────────────
 function onLineTouch(idx) {
   if (selectedIdx.value === idx) return
   selectedIdx.value = idx
   // 立即清空旧数据，避免点切换时短暂显示上一个点的数据
   selectedProfile.value = null
+  profileInsight.value  = null
   stayData.value = null
   stayActiveBar.value = -1
   // 并行发起两个请求，互不等待
@@ -665,10 +760,11 @@ function onLineRelease() {
 }
 
 function clearSelection() {
-  selectedIdx.value = null
+  selectedIdx.value     = null
   selectedProfile.value = null
-  stayData.value = null
-  stayActiveBar.value = -1
+  profileInsight.value  = null
+  stayData.value        = null
+  stayActiveBar.value   = -1
 }
 
 function buildProfileParams(idx) {
@@ -697,6 +793,30 @@ function buildProfileParams(idx) {
       const last = new Date(y, mo, 0).getDate()
       return { start: `${label}-01`, end: `${label}-${String(last).padStart(2,'0')}` }
     }
+  }
+}
+
+async function generateInsight() {
+  const confirmed = await new Promise(resolve => {
+    uni.showModal({
+      title: '生成 AI 客群分析',
+      content: '将根据该时段客群画像数据调用 AI 生成分析，是否继续？',
+      confirmText: '生成',
+      cancelText: '取消',
+      success: res => resolve(res.confirm)
+    })
+  })
+  if (!confirmed) return
+
+  const params = buildProfileParams(selectedIdx.value)
+  if (!params) return
+  insightLoading.value = true
+  try {
+    const data = await post('/api/merchant/profile/insight', params, { showLoad: false })
+    profileInsight.value = data?.content || ''
+  } catch (_) {
+  } finally {
+    insightLoading.value = false
   }
 }
 
@@ -879,21 +999,6 @@ const stayBuckets = computed(() => {
   }))
 })
 
-// Y 轴转为分钟（保留一位小数），便于阅读
-const stayTrendData = computed(() =>
-  (stayData.value?.trend || []).map(p => Math.round(p.avgStaySeconds / 6) / 10)
-)
-
-const stayTrendLabels = computed(() =>
-  (stayData.value?.trend || []).map(p => {
-    const lbl = p.timeLabel || ''
-    // 含空格 → 日期时间格式 "YYYY-MM-DD HH:mm:00"，显示 HH:mm
-    if (lbl.includes(' ')) return lbl.split(' ')[1].slice(0, 5)
-    // 纯日期 "YYYY-MM-DD"，取 MM-DD
-    return lbl.slice(5, 10)
-  })
-)
-
 // 停留分析的参数：跟随选中折线点（与 buildProfileParams 对齐）
 function buildStayParams(idx) {
   const pt   = trendPoints.value[idx]
@@ -978,7 +1083,7 @@ async function doExport() {
 
 async function loadStayAnalysis(idx) {
   // 月 Tab 不显示停留分析，跳过请求
-  if (activeTab.value === 3) { stayData.value = null; return }
+  if (activeTab.value === 2) { stayData.value = null; return }
   const params = buildStayParams(idx)
   if (!params) { stayData.value = null; return }
   stayLoading.value = true
@@ -1216,6 +1321,13 @@ async function loadStayAnalysis(idx) {
       color: #1a1a2e;
     }
 
+    .si-unit {
+      font-size: 22rpx;
+      font-weight: 400;
+      color: #999;
+      margin-left: 2rpx;
+    }
+
     .si-label {
       font-size: 20rpx;
       color: #999;
@@ -1238,12 +1350,20 @@ async function loadStayAnalysis(idx) {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 12rpx;
+}
 
-  .chart-card-title {
-    font-size: 26rpx;
-    font-weight: 600;
-    color: #333;
-  }
+.chart-card-title {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #333;
+}
+
+.chart-axis-hint {
+  display: flex;
+  justify-content: space-between;
+  padding: 6rpx 8rpx 0;
+  font-size: 20rpx;
+  color: #bbb;
 }
 
 /* ② 对比切换按钮 */
@@ -1320,12 +1440,25 @@ async function loadStayAnalysis(idx) {
   .placeholder-text { font-size: 26rpx; color: #ccc; }
 }
 
+
 .chart-hint {
-  text-align: center;
-  font-size: 20rpx;
-  color: #ccc;
-  margin-top: 12rpx;
-  padding-bottom: 4rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+  font-size: 22rpx;
+  color: #1f4788;
+  background: rgba(31, 71, 136, 0.06);
+  border-radius: 12rpx;
+  margin-top: 14rpx;
+  padding: 14rpx 20rpx;
+
+  .chart-hint-icon { font-size: 24rpx; }
+
+  &--active {
+    color: #17794a;
+    background: rgba(23, 121, 74, 0.07);
+  }
 }
 
 /* section 标题 */
@@ -1468,6 +1601,56 @@ async function loadStayAnalysis(idx) {
 }
 
 
+.insight-wrap {
+  margin-top: 28rpx;
+}
+
+.insight-btn {
+  width: 100%;
+  height: 72rpx;
+  line-height: 72rpx;
+  background: linear-gradient(135deg, #4a6cf7, #6a3de8);
+  color: #fff;
+  font-size: 26rpx;
+  border-radius: 12rpx;
+  border: none;
+  &::after { border: none; }
+  &[disabled] { opacity: 0.6; }
+}
+
+.insight-box {
+  background: #f5f3ff;
+  border-radius: 12rpx;
+  padding: 20rpx 24rpx;
+  border-left: 6rpx solid #6a3de8;
+}
+
+.insight-box-hd {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14rpx;
+}
+
+.insight-box-title {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #4a2db0;
+}
+
+.insight-box-close {
+  font-size: 24rpx;
+  color: #999;
+  padding: 4rpx 8rpx;
+}
+
+.insight-box-content {
+  font-size: 24rpx;
+  color: #333;
+  line-height: 1.8;
+  white-space: pre-wrap;
+}
+
 .tab-spacer {
   height: calc(96rpx + env(safe-area-inset-bottom) + 32rpx);
 }
@@ -1597,13 +1780,4 @@ async function loadStayAnalysis(idx) {
   padding: 48rpx 0;
 }
 
-.stay-trend-title {
-  font-size: 24rpx;
-  font-weight: 600;
-  color: #666;
-  margin-top: 24rpx;
-  padding-top: 20rpx;
-  border-top: 1rpx solid #f0f0f0;
-  margin-bottom: 8rpx;
-}
 </style>

@@ -12,7 +12,7 @@
       <!-- 核心数字 -->
       <view class="hero-number">
         <view class="hero-label">今日进店客流</view>
-        <view class="hero-val">{{ stat.todayCount }}</view>
+        <view class="hero-val">{{ stat.todayCount }}<text class="hero-unit">人</text></view>
         <view class="hero-delta" :class="stat.deltaPercent >= 0 ? 'delta-up' : 'delta-down'">
           <text>较昨日 {{ stat.deltaPercent >= 0 ? '+' : '' }}{{ stat.deltaPercent }}%</text>
         </view>
@@ -21,7 +21,7 @@
       <!-- 3 格小指标 -->
       <view class="sub-metrics">
         <view class="sub-metric">
-          <view class="sm-val">{{ stat.currentInStore }}</view>
+          <view class="sm-val">{{ stat.currentInStore }}<text class="sm-unit">人</text></view>
           <view class="sm-label">当前在店</view>
         </view>
         <view class="sub-metric border-x">
@@ -47,7 +47,7 @@
     >
 
       <!-- 高峰提醒滚动消息栏 -->
-      <view v-if="peakMessage" class="peak-banner" @click="onPeakBannerClick">
+      <view v-if="peakMessage && !anySheetOpen" class="peak-banner" @click="onPeakBannerClick">
         <text class="peak-icon">🔔</text>
         <view class="marquee-wrap">
           <text class="marquee-text">{{ peakMessage }}</text>
@@ -118,6 +118,144 @@
             </view>
           </view>
         </view>
+
+        <!-- 今日客群画像 -->
+        <view class="mini-card" style="margin-top: 20rpx;">
+          <view class="mini-title-row">
+            <text class="mini-title">今日客群画像</text>
+            <text class="mini-detail" @click="goTrend">详情 ›</text>
+          </view>
+
+          <view v-if="profileLoading" class="profile-loading">
+            <text>加载画像中…</text>
+          </view>
+
+          <view v-else-if="profileData && profileData.totalEnter > 0" class="profile-snapshot">
+            <!-- 顶部统计 -->
+            <view class="ps-stat-row">
+              <view class="ps-stat">
+                <view class="ps-val">{{ profileData.totalEnter }}</view>
+                <view class="ps-label">进店人次</view>
+              </view>
+              <view class="ps-stat">
+                <view class="ps-val">{{ profileAvgStayText }}</view>
+                <view class="ps-label">平均停留</view>
+              </view>
+              <view class="ps-stat">
+                <view class="ps-val">{{ profileNewRatio }}%</view>
+                <view class="ps-label">新客占比</view>
+              </view>
+            </view>
+
+            <!-- 新客 / 回头客 -->
+            <template v-if="profileNewRatio > 0 || profileReturnRatio > 0">
+              <view class="ps-section-label">客户构成</view>
+              <view class="gender-bar-wrap">
+                <view class="gb-new"    :style="{ width: profileNewRatio    + '%' }" />
+                <view class="gb-return" :style="{ width: profileReturnRatio + '%' }" />
+              </view>
+              <view class="gender-legend">
+                <text class="gl-new">新客 {{ profileNewRatio }}%</text>
+                <text class="gl-return">回头客 {{ profileReturnRatio }}%</text>
+              </view>
+            </template>
+
+            <!-- 性别 -->
+            <view class="ps-section-label">性别构成</view>
+            <view class="gender-bar-wrap">
+              <view class="gb-male"   :style="{ width: profileMaleP   + '%' }" />
+              <view class="gb-female" :style="{ width: profileFemaleP + '%' }" />
+            </view>
+            <view class="gender-legend">
+              <text class="gl-male">男 {{ profileMaleP }}%</text>
+              <text class="gl-female">女 {{ profileFemaleP }}%</text>
+            </view>
+
+            <!-- 年龄段 -->
+            <view class="ps-section-label">年龄分布</view>
+            <view class="age-cols">
+              <view class="age-col-ps" v-for="ag in profileAgeData" :key="ag.label">
+                <text class="ac-pct" :style="{ color: ag.color }">{{ ag.pct }}%</text>
+                <view class="ac-bar" :style="{ height: ag.h + 'rpx', background: ag.color }" />
+                <text class="ac-label">{{ ag.label }}</text>
+              </view>
+            </view>
+
+            <!-- 上衣类型 -->
+            <template v-if="profileUpperData.some(a => a.pct > 0)">
+              <view class="ps-section-label">上衣类型</view>
+              <view class="attr-rows">
+                <view v-for="attr in profileUpperData" :key="attr.label" class="attr-row">
+                  <text class="ar-label">{{ attr.label }}</text>
+                  <view class="ar-bar-bg">
+                    <view class="ar-bar-fill" :style="{ width: attr.pct + '%', background: attr.color }" />
+                  </view>
+                  <text class="ar-pct">{{ attr.pct }}%</text>
+                </view>
+              </view>
+            </template>
+
+            <!-- 上衣风格 -->
+            <template v-if="profileUpperStyleData.some(a => a.pct > 0)">
+              <view class="ps-section-label">上衣风格</view>
+              <view class="attr-rows">
+                <view v-for="attr in profileUpperStyleData" :key="attr.label" class="attr-row">
+                  <text class="ar-label">{{ attr.label }}</text>
+                  <view class="ar-bar-bg">
+                    <view class="ar-bar-fill" :style="{ width: attr.pct + '%', background: attr.color }" />
+                  </view>
+                  <text class="ar-pct">{{ attr.pct }}%</text>
+                </view>
+              </view>
+            </template>
+
+            <!-- 下装类型 -->
+            <template v-if="profileLowerData.some(a => a.pct > 0)">
+              <view class="ps-section-label">下装类型</view>
+              <view class="attr-rows">
+                <view v-for="attr in profileLowerData" :key="attr.label" class="attr-row">
+                  <text class="ar-label">{{ attr.label }}</text>
+                  <view class="ar-bar-bg">
+                    <view class="ar-bar-fill" :style="{ width: attr.pct + '%', background: attr.color }" />
+                  </view>
+                  <text class="ar-pct">{{ attr.pct }}%</text>
+                </view>
+              </view>
+            </template>
+
+            <!-- 下装风格 -->
+            <template v-if="profileLowerStyleData.some(a => a.pct > 0)">
+              <view class="ps-section-label">下装风格</view>
+              <view class="attr-rows">
+                <view v-for="attr in profileLowerStyleData" :key="attr.label" class="attr-row">
+                  <text class="ar-label">{{ attr.label }}</text>
+                  <view class="ar-bar-bg">
+                    <view class="ar-bar-fill" :style="{ width: attr.pct + '%', background: attr.color }" />
+                  </view>
+                  <text class="ar-pct">{{ attr.pct }}%</text>
+                </view>
+              </view>
+            </template>
+
+            <!-- 配饰 & 随身物品 -->
+            <template v-if="profileAccessoryData.length">
+              <view class="ps-section-label">配饰 & 随身物品</view>
+              <view class="attr-rows">
+                <view v-for="attr in profileAccessoryData" :key="attr.label" class="attr-row">
+                  <text class="ar-label">{{ attr.label }}</text>
+                  <view class="ar-bar-bg">
+                    <view class="ar-bar-fill" :style="{ width: attr.pct + '%', background: attr.color }" />
+                  </view>
+                  <text class="ar-pct">{{ attr.pct }}%</text>
+                </view>
+              </view>
+            </template>
+          </view>
+
+          <view v-else class="profile-empty">
+            <text>暂无今日画像数据</text>
+          </view>
+        </view>
       </view>
 
       <!-- 数据来源 -->
@@ -138,8 +276,8 @@
         @click="selectStore(s)"
       >
         <view style="flex:1; min-width:0; overflow:hidden;">
-          <view style="font-size:28rpx; font-weight:600; color:#1a1a2e; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ s.name }}</view>
-          <view style="font-size:22rpx; color:#999; margin-top:4rpx;">{{ s.cameraInfo }}</view>
+          <view style="font-size:42rpx; font-weight:600; color:#1a1a2e; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ s.name }}</view>
+          <view style="font-size:33rpx; color:#999; margin-top:4rpx;">{{ s.cameraInfo }}</view>
         </view>
         <view v-if="s.id === currentStoreId" class="current-badge">当前</view>
       </view>
@@ -148,6 +286,10 @@
     <!-- 分钟曲线弹层 -->
     <BottomSheet :show="showMinuteSheet" :title="minuteSheetTitle" @close="showMinuteSheet = false">
       <view style="padding: 0 0 24rpx;">
+        <view v-if="minuteData.length > 0" class="minute-axis-label">
+          <text class="y-axis-cap">↑ 进店人数（人）</text>
+          <text class="x-axis-cap">时刻（时:分）→</text>
+        </view>
         <UniChart
           v-if="showMinuteSheet"
           canvas-id="chart-minute"
@@ -155,6 +297,8 @@
           :data="minuteData"
           :labels="minuteLabels"
           :height="300"
+          :show-y-axis="true"
+          :y-unit="'人'"
         />
         <view v-if="minuteData.length === 0" class="empty-tip">该时段暂无分钟级数据</view>
       </view>
@@ -197,6 +341,10 @@ const ageData = ref([
   { label: '18-60', pct: 0, color: '#2d6fd6', barH: 0 },
   { label: '>60',   pct: 0, color: '#9556cc', barH: 0 }
 ])
+
+// ── 今日客群画像 ─────────────────────────────────────────────
+const profileData    = ref(null)
+const profileLoading = ref(false)
 
 const storeName     = ref('加载中...')
 const currentStoreId = ref('')
@@ -310,9 +458,135 @@ async function onPullRefresh() {
   isRefreshing.value = false
 }
 
-async function fetchAll() {
-  await Promise.all([fetchDashboard(), fetchHourlyTrend()])
+async function fetchProfile() {
+  profileLoading.value = true
+  try {
+    const d = new Date()
+    const today = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+    profileData.value = await get('/api/merchant/profile', { start: today, end: today }, { showLoad: false })
+  } catch (_) {
+    profileData.value = null
+  } finally {
+    profileLoading.value = false
+  }
 }
+
+async function fetchAll() {
+  await Promise.all([fetchDashboard(), fetchHourlyTrend(), fetchProfile()])
+}
+
+// ── 画像数据计算 ─────────────────────────────────────────────
+function profilePct(n, total) {
+  if (!total || !n) return 0
+  return Math.min(100, Math.round((n / total) * 100))
+}
+
+const profileMaleP = computed(() => {
+  const d = profileData.value
+  if (!d) return 50
+  const t = (d.genderMale || 0) + (d.genderFemale || 0)
+  return t > 0 ? Math.round((d.genderMale / t) * 100) : 50
+})
+const profileFemaleP = computed(() => 100 - profileMaleP.value)
+
+const profileNewRatio = computed(() => {
+  const d = profileData.value
+  if (!d || !d.totalEnter) return 0
+  return profilePct(d.newCustomerCount, d.totalEnter)
+})
+
+const profileReturnRatio = computed(() => {
+  const d = profileData.value
+  if (!d || !d.totalEnter) return 0
+  return profilePct(d.returningCustomerCount, d.totalEnter)
+})
+
+const profileAgeData = computed(() => {
+  const d = profileData.value
+  if (!d) return []
+  const t = (d.ageUnder18 || 0) + (d.age1860 || 0) + (d.ageOver60 || 0)
+  if (t === 0) return [
+    { label: '<18',   pct: 0, color: '#e8842a', h: 0 },
+    { label: '18-60', pct: 0, color: '#2d6fd6', h: 0 },
+    { label: '>60',   pct: 0, color: '#9556cc', h: 0 }
+  ]
+  const p1 = profilePct(d.ageUnder18, t)
+  const p2 = profilePct(d.age1860, t)
+  const p3 = 100 - p1 - p2
+  const mx = Math.max(p1, p2, p3, 1)
+  return [
+    { label: '<18',   pct: p1, color: '#e8842a', h: Math.round(p1/mx*64) },
+    { label: '18-60', pct: p2, color: '#2d6fd6', h: Math.round(p2/mx*64) },
+    { label: '>60',   pct: p3, color: '#9556cc', h: Math.round(p3/mx*64) }
+  ]
+})
+
+const profileAvgStayText = computed(() => {
+  const secs = profileData.value?.avgStaySeconds || 0
+  if (secs <= 0) return '--'
+  const m = Math.floor(secs / 60)
+  const s = secs % 60
+  return s > 0 ? `${m}分${s}秒` : `${m}分钟`
+})
+
+const profileUpperData = computed(() => {
+  const d = profileData.value
+  if (!d) return []
+  const total = d.totalEnter || 1
+  return [
+    { label: '短袖',   pct: profilePct(d.upperShort, total), color: '#2d6fd6' },
+    { label: '长袖',   pct: profilePct(d.upperLong,  total), color: '#17794a' },
+    { label: '长外套', pct: profilePct(d.upperCoat,  total), color: '#e8842a' }
+  ].filter(a => a.pct > 0)
+})
+
+const profileUpperStyleData = computed(() => {
+  const d = profileData.value
+  if (!d) return []
+  const total = d.totalEnter || 1
+  return [
+    { label: '条纹',   pct: profilePct(d.upperStyleStripe, total), color: '#5c6bc0' },
+    { label: 'Logo款', pct: profilePct(d.upperStyleLogo,   total), color: '#0288d1' },
+    { label: '格子',   pct: profilePct(d.upperStylePlaid,  total), color: '#00796b' },
+    { label: '拼接',   pct: profilePct(d.upperStyleSplice, total), color: '#7b1fa2' }
+  ].filter(a => a.pct > 0)
+})
+
+const profileLowerData = computed(() => {
+  const d = profileData.value
+  if (!d) return []
+  const total = d.totalEnter || 1
+  return [
+    { label: '长裤', pct: profilePct(d.lowerTrousers, total), color: '#37474f' },
+    { label: '短裤', pct: profilePct(d.lowerShorts,   total), color: '#00838f' },
+    { label: '裙子', pct: profilePct(d.lowerSkirt,    total), color: '#d64a7a' }
+  ].filter(a => a.pct > 0)
+})
+
+const profileLowerStyleData = computed(() => {
+  const d = profileData.value
+  if (!d) return []
+  const total = d.totalEnter || 1
+  return [
+    { label: '条纹', pct: profilePct(d.lowerStyleStripe,  total), color: '#e65100' },
+    { label: '图案', pct: profilePct(d.lowerStylePattern, total), color: '#6d4c41' }
+  ].filter(a => a.pct > 0)
+})
+
+const profileAccessoryData = computed(() => {
+  const d = profileData.value
+  if (!d) return []
+  const total = d.totalEnter || 1
+  return [
+    { label: '背包',     pct: profilePct(d.bagBackpack,      total), color: '#6b3399' },
+    { label: '眼镜',     pct: profilePct(d.accessoryGlasses, total), color: '#1a4a8a' },
+    { label: '手提包',   pct: profilePct(d.bagHandbag,       total), color: '#c62828' },
+    { label: '帽子',     pct: profilePct(d.accessoryHat,     total), color: '#e8842a' },
+    { label: '单肩包',   pct: profilePct(d.bagShoulder,      total), color: '#00838f' },
+    { label: '靴子',     pct: profilePct(d.accessoryBoots,   total), color: '#37474f' },
+    { label: '手持物品', pct: profilePct(d.holdItem,         total), color: '#795548' }
+  ].filter(a => a.pct > 0)
+})
 
 // ── 分钟曲线 ─────────────────────────────────────────────────
 async function onPeakBannerClick() {
@@ -487,17 +761,25 @@ function onAgeClick(i) {
     padding: 8rpx 0 16rpx;
 
     .hero-label {
-      font-size: 22rpx;
+      font-size: 33rpx;
       opacity: 0.6;
       letter-spacing: 2rpx;
     }
 
     .hero-val {
-      font-size: 112rpx;
+      font-size: 168rpx;
       font-weight: 700;
       letter-spacing: -4rpx;
       line-height: 1.1;
       margin: 12rpx 0 8rpx;
+
+      .hero-unit {
+        font-size: 48rpx;
+        font-weight: 500;
+        letter-spacing: 0;
+        margin-left: 8rpx;
+        vertical-align: middle;
+      }
     }
 
     .hero-delta {
@@ -506,7 +788,7 @@ function onAgeClick(i) {
       gap: 8rpx;
       padding: 6rpx 24rpx;
       border-radius: 40rpx;
-      font-size: 22rpx;
+      font-size: 33rpx;
 
       &.delta-up   { background: rgba(23, 121, 74, 0.35); }
       &.delta-down { background: rgba(200, 50, 50, 0.35); }
@@ -527,11 +809,11 @@ function onAgeClick(i) {
       .sm-val {
         font-size: 44rpx;
         font-weight: 700;
-        .sm-unit { font-size: 24rpx; font-weight: 500; }
+        .sm-unit { font-size: 26rpx; font-weight: 500; }
       }
 
       .sm-label {
-        font-size: 20rpx;
+        font-size: 26rpx;
         opacity: 0.55;
         margin-top: 4rpx;
       }
@@ -568,8 +850,8 @@ function onAgeClick(i) {
 
   &:active { opacity: 0.8; }
 
-  .peak-icon { font-size: 28rpx; flex-shrink: 0; }
-  .peak-arrow { font-size: 28rpx; color: #e6a817; flex-shrink: 0; }
+  .peak-icon { font-size: 42rpx; flex-shrink: 0; }
+  .peak-arrow { font-size: 42rpx; color: #e6a817; flex-shrink: 0; }
 }
 
 .marquee-wrap {
@@ -579,7 +861,7 @@ function onAgeClick(i) {
 
   .marquee-text {
     display: inline-block;
-    font-size: 24rpx;
+    font-size: 36rpx;
     color: #7a5c00;
     animation: marquee-scroll 16s linear infinite;
     padding-left: 100%;
@@ -608,13 +890,13 @@ function onAgeClick(i) {
   }
 
   .mini-title {
-    font-size: 24rpx;
+    font-size: 36rpx;
     font-weight: 600;
     color: #333;
   }
 
   .mini-detail {
-    font-size: 22rpx;
+    font-size: 33rpx;
     color: #1f4788;
     &:active { opacity: 0.6; }
   }
@@ -648,7 +930,7 @@ function onAgeClick(i) {
     justify-content: center;
 
     .gender-hole-label {
-      font-size: 18rpx;
+      font-size: 27rpx;
       color: #666;
       font-weight: 600;
     }
@@ -675,7 +957,7 @@ function onAgeClick(i) {
     }
 
     .dl-label {
-      font-size: 20rpx;
+      font-size: 30rpx;
       color: #666;
     }
   }
@@ -694,9 +976,9 @@ function onAgeClick(i) {
       align-items: center;
       gap: 4rpx;
 
-      .age-pct  { font-size: 20rpx; font-weight: 600; }
+      .age-pct  { font-size: 30rpx; font-weight: 600; }
       .age-fill { width: 100%; border-radius: 6rpx 6rpx 0 0; }
-      .age-label { font-size: 18rpx; color: #bbb; }
+      .age-label { font-size: 27rpx; color: #bbb; }
     }
   }
 }
@@ -714,8 +996,8 @@ function onAgeClick(i) {
     align-items: center;
     padding: 28rpx 28rpx 12rpx;
 
-    .card-title { font-size: 26rpx; font-weight: 600; color: #333; }
-    .card-more  { font-size: 24rpx; color: #1f4788; }
+    .card-title { font-size: 39rpx; font-weight: 600; color: #333; }
+    .card-more  { font-size: 36rpx; color: #1f4788; }
   }
 }
 
@@ -747,7 +1029,7 @@ function onAgeClick(i) {
   }
 
   .tip-text {
-    font-size: 22rpx;
+    font-size: 33rpx;
     color: #fff;
     font-weight: 600;
   }
@@ -806,14 +1088,14 @@ function onAgeClick(i) {
       font-size: 40rpx;
     }
 
-    .qi-label { font-size: 22rpx; color: #333; }
+    .qi-label { font-size: 33rpx; color: #333; }
   }
 }
 
 /* ===== 数据来源 ===== */
 .data-source {
   text-align: center;
-  font-size: 20rpx;
+  font-size: 30rpx;
   color: #c0c0c0;
   padding: 24rpx 0 8rpx;
 }
@@ -842,12 +1124,140 @@ function onAgeClick(i) {
   font-weight: 600;
 }
 
+/* ===== 分钟曲线轴标签 ===== */
+.minute-axis-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 24rpx 8rpx;
+
+  .y-axis-cap,
+  .x-axis-cap {
+    font-size: 20rpx;
+    color: #bbb;
+  }
+}
+
 /* ===== 空提示 ===== */
 .empty-tip {
   text-align: center;
   color: #bbb;
-  font-size: 26rpx;
+  font-size: 39rpx;
   padding: 40rpx 0;
+}
+
+/* ===== 今日客群画像 ===== */
+.profile-loading,
+.profile-empty {
+  text-align: center;
+  padding: 40rpx 0;
+  font-size: 26rpx;
+  color: #ccc;
+}
+
+.profile-snapshot {
+  .ps-stat-row {
+    display: flex;
+    margin-bottom: 32rpx;
+
+    .ps-stat {
+      flex: 1;
+      text-align: center;
+
+      &:not(:last-child) { border-right: 1rpx solid #f0f0f0; }
+
+      .ps-val   { font-size: 40rpx; font-weight: 700; color: #1a1a2e; }
+      .ps-label { font-size: 22rpx; color: #999; margin-top: 4rpx; }
+    }
+  }
+
+  .ps-section-label {
+    font-size: 26rpx;
+    color: #888;
+    margin-bottom: 16rpx;
+    margin-top: 24rpx;
+    font-weight: 500;
+
+    &:first-child { margin-top: 0; }
+  }
+
+  .gender-bar-wrap {
+    height: 20rpx;
+    border-radius: 10rpx;
+    overflow: hidden;
+    display: flex;
+    margin-bottom: 10rpx;
+
+    .gb-male   { background: linear-gradient(90deg, #1a4a8a, #3a7ad6); transition: width .3s; }
+    .gb-female { background: linear-gradient(90deg, #d64a7a, #e8729a); transition: width .3s; }
+    .gb-new    { background: linear-gradient(90deg, #17794a, #34a871); transition: width .3s; }
+    .gb-return { background: linear-gradient(90deg, #e8842a, #f5a742); transition: width .3s; }
+  }
+
+  .gender-legend {
+    display: flex;
+    justify-content: space-between;
+    font-size: 24rpx;
+
+    .gl-male   { color: #2d6fd6; }
+    .gl-female { color: #d64a7a; }
+    .gl-new    { color: #17794a; }
+    .gl-return { color: #e8842a; }
+  }
+
+  .age-cols {
+    display: flex;
+    gap: 16rpx;
+    align-items: flex-end;
+
+    .age-col-ps {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4rpx;
+
+      .ac-pct   { font-size: 24rpx; font-weight: 600; }
+      .ac-bar   { width: 100%; border-radius: 6rpx 6rpx 0 0; }
+      .ac-label { font-size: 20rpx; color: #bbb; }
+    }
+  }
+
+  .attr-rows {
+    .attr-row {
+      display: flex;
+      align-items: center;
+      gap: 16rpx;
+      margin-bottom: 18rpx;
+
+      &:last-child { margin-bottom: 0; }
+
+      .ar-label {
+        width: 130rpx;
+        font-size: 24rpx;
+        color: #666;
+        flex-shrink: 0;
+      }
+
+      .ar-bar-bg {
+        flex: 1;
+        height: 14rpx;
+        background: #f0f0f0;
+        border-radius: 7rpx;
+        overflow: hidden;
+
+        .ar-bar-fill { height: 100%; border-radius: 7rpx; transition: width .4s ease; }
+      }
+
+      .ar-pct {
+        width: 70rpx;
+        font-size: 24rpx;
+        color: #999;
+        text-align: right;
+        flex-shrink: 0;
+      }
+    }
+  }
 }
 
 .tab-spacer { height: 160rpx; }

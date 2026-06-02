@@ -35,7 +35,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted, getCurrentInstance } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, onBeforeUnmount, getCurrentInstance } from 'vue'
 
 const props = defineProps({
   canvasId:       { type: String,  required: true },
@@ -52,7 +52,9 @@ const props = defineProps({
   showPeak:       { type: Boolean, default: false },     // 常驻峰值气泡标注
   scrollable:     { type: Boolean, default: false },     // 数据多时横向滚动
   scrollThreshold:{ type: Number,  default: 14 },        // 触发滚动的最少数据点数
-  pointW:         { type: Number,  default: 44 }         // 滚动时每个数据点宽度(px)
+  pointW:         { type: Number,  default: 44 },        // 滚动时每个数据点宽度(px)
+  showYAxis:      { type: Boolean, default: false },     // 显示 Y 轴刻度线 + 标注
+  yUnit:          { type: String,  default: '' }         // Y 轴单位（显示在刻度和 tooltip 中）
 })
 
 const emit = defineEmits(['barTouch', 'barRelease', 'lineTouch', 'lineRelease'])
@@ -94,6 +96,18 @@ function scheduleDraw(hoveredIdx = -1, delay = 80) {
   }, delay)
 }
 
+onBeforeUnmount(() => {
+  if (_drawTimer) clearTimeout(_drawTimer)
+  // White-out the native canvas before component is destroyed so it doesn't
+  // ghost behind the next tab's (possibly smaller) canvas in WeChat's native layer
+  try {
+    const ctx = uni.createCanvasContext(props.canvasId, proxy)
+    ctx.setFillStyle('#ffffff')
+    ctx.fillRect(0, 0, 3000, 3000)
+    ctx.draw(false)
+  } catch (_) {}
+})
+
 onUnmounted(() => {
   if (_drawTimer) clearTimeout(_drawTimer)
 })
@@ -108,10 +122,25 @@ watch(() => props.data, () => {
   scheduleDraw(-1, 80)
 }, { deep: true })
 
+watch(() => props.compareData, () => {
+  scheduleDraw(-1, 80)
+}, { deep: true })
+
 watch(() => props.type, () => {
   updateSize()
   scheduleDraw(-1, 80)
 })
+
+// 左侧 padding：showYAxis=true 时按最大标签字符数动态分配，防止4位数溢出
+function leftPad() {
+  if (!props.showYAxis) return 4
+  const filtered = props.data.filter(v => v != null)
+  const maxV = filtered.length ? Math.max(...filtered, 1) : 1
+  const labelStr = props.yUnit
+    ? `${Math.round(maxV)}${props.yUnit}`
+    : String(Math.round(maxV))
+  return Math.max(28, labelStr.length * 7 + 5)
+}
 
 // ── 触摸处理 ─────────────────────────────────────────────────
 function onTouchStart(e) {
@@ -119,10 +148,11 @@ function onTouchStart(e) {
   const touch = e.touches[0]
   if (!touch) return
   const x = touch.x
+  const pad = leftPad()
 
   if (props.type === 'bar') {
-    const colW = canvasW.value / props.data.length
-    const idx = Math.floor(x / colW)
+    const colW = (canvasW.value - pad) / props.data.length
+    const idx = Math.floor((x - pad) / colW)
     if (idx >= 0 && idx < props.data.length) {
       scheduleDraw(idx, 0)
       emit('barTouch', idx)
@@ -130,8 +160,8 @@ function onTouchStart(e) {
   } else if (props.type === 'line') {
     const n = props.data.length
     if (n === 0) return
-    const stepX = n > 1 ? (canvasW.value - 8) / (n - 1) : canvasW.value
-    const idx = Math.max(0, Math.min(n - 1, Math.round((x - 4) / stepX)))
+    const stepX = n > 1 ? (canvasW.value - pad - 4) / (n - 1) : (canvasW.value - pad)
+    const idx = Math.max(0, Math.min(n - 1, Math.round((x - pad) / stepX)))
     scheduleDraw(idx, 0)
     emit('lineTouch', idx)
   }
@@ -142,10 +172,11 @@ function onTouchMove(e) {
   const touch = e.touches[0]
   if (!touch) return
   const x = touch.x
+  const pad = leftPad()
 
   if (props.type === 'bar') {
-    const colW = canvasW.value / props.data.length
-    const idx = Math.floor(x / colW)
+    const colW = (canvasW.value - pad) / props.data.length
+    const idx = Math.floor((x - pad) / colW)
     if (idx >= 0 && idx < props.data.length) {
       scheduleDraw(idx, 0)
       emit('barTouch', idx)
@@ -153,8 +184,8 @@ function onTouchMove(e) {
   } else if (props.type === 'line') {
     const n = props.data.length
     if (n === 0) return
-    const stepX = n > 1 ? (canvasW.value - 8) / (n - 1) : canvasW.value
-    const idx = Math.max(0, Math.min(n - 1, Math.round((x - 4) / stepX)))
+    const stepX = n > 1 ? (canvasW.value - pad - 4) / (n - 1) : (canvasW.value - pad)
+    const idx = Math.max(0, Math.min(n - 1, Math.round((x - pad) / stepX)))
     scheduleDraw(idx, 0)
     emit('lineTouch', idx)
   }
@@ -172,14 +203,22 @@ function onTouchEnd() {
 
 // ── 主绘制函数 ────────────────────────────────────────────────
 function draw(hoveredIdx = -1) {
-  if (!props.data.length) return
   _drawing = true
   const ctx = uni.createCanvasContext(props.canvasId, proxy)
   const w = canvasW.value
   const h = canvasH.value
 
+  // 始终先清空画布，避免切换数据时旧线残留
+  ctx.clearRect(0, 0, w, h)
+  ctx.setFillStyle('#ffffff')
+  ctx.fillRect(0, 0, w, h)
+
+  if (!props.data.length) {
+    ctx.draw(false, () => { _drawing = false })
+    return
+  }
+
   if (props.type === 'donut') {
-    ctx.clearRect(0, 0, w, h)
     drawDonut(ctx, w, h)
     ctx.draw(false, () => { _drawing = false })
     return
@@ -188,9 +227,10 @@ function draw(hoveredIdx = -1) {
   const LABEL_H = 18
   const DRAW_H = h - LABEL_H
   const allVals = [...props.data, ...props.compareData].filter(v => v != null)
-  const maxVal = Math.max(...allVals, 1)
+  const rawMax  = Math.max(...allVals, 1)
+  const maxVal  = ceilNice(rawMax)
 
-  ctx.clearRect(0, 0, w, h)
+  if (props.showYAxis) drawYAxisOverlay(ctx, w, DRAW_H, maxVal)
 
   if (props.type === 'bar') {
     drawBar(ctx, w, DRAW_H, h, maxVal, hoveredIdx)
@@ -202,16 +242,17 @@ function draw(hoveredIdx = -1) {
   if (props.labels.length) {
     const n = props.labels.length
     const isLine = props.type === 'line'
-    const lineStepX = n > 1 ? (w - 8) / (n - 1) : w
-    const barStep   = w / n
+    const pad = leftPad()
+    const lineStepX = n > 1 ? (w - pad - 4) / (n - 1) : (w - pad)
+    const barStep   = (w - pad) / n
 
     // 确定实际会被绘制的最大索引（隔点模式下取最后一个偶数索引）
     const lastDrawnIdx = n <= 8 ? n - 1 : (n - 1) % 2 === 0 ? n - 1 : n - 2
     props.labels.forEach((lbl, i) => {
       if (n <= 8 || i % 2 === 0) {
         const x = isLine
-          ? 4 + i * lineStepX
-          : barStep * i + barStep / 2
+          ? pad + i * lineStepX
+          : pad + barStep * i + barStep / 2
         // 首标签左对齐、末可见标签右对齐，避免超出 canvas 边界被裁剪
         const align = i === 0 ? 'left' : (i === lastDrawnIdx ? 'right' : 'center')
         ctx.setFillStyle('#aaa')
@@ -228,12 +269,13 @@ function draw(hoveredIdx = -1) {
 // ── 柱状图（含 tooltip）────────────────────────────────────────
 function drawBar(ctx, w, drawH, h, maxVal, hoveredIdx) {
   const n = props.data.length
-  const colW = w / n
+  const pad = leftPad()
+  const colW = (w - pad) / n
   const barW = colW * 0.55
 
   props.data.forEach((val, i) => {
     const barH = Math.max((val / maxVal) * drawH * 0.92, 2)
-    const x = colW * i + (colW - barW) / 2
+    const x = pad + colW * i + (colW - barW) / 2
     const y = drawH - barH
     const isPeak = val >= props.peakThreshold
     const isHovered = i === hoveredIdx
@@ -248,7 +290,7 @@ function drawBar(ctx, w, drawH, h, maxVal, hoveredIdx) {
 
     // tooltip
     if (isHovered) {
-      drawTooltip(ctx, w, x + barW / 2, y, String(val))
+      drawTooltip(ctx, w, x + barW / 2, y, props.yUnit ? String(val) + props.yUnit : String(val))
     }
   })
 }
@@ -345,9 +387,10 @@ function drawDonut(ctx, w, h) {
 function drawCompareLine(ctx, w, drawH, maxVal) {
   const n = props.compareData.length
   if (n === 0) return
-  const stepX = n > 1 ? (w - 8) / (n - 1) : w
+  const pad = leftPad()
+  const stepX = n > 1 ? (w - pad - 4) / (n - 1) : (w - pad)
   const pts = props.compareData.map((val, i) => ({
-    x: 4 + i * stepX,
+    x: pad + i * stepX,
     y: val != null ? 4 + drawH - (val / maxVal) * drawH * 0.9 : null
   }))
 
@@ -376,13 +419,51 @@ function drawCompareLine(ctx, w, drawH, maxVal) {
   }
 }
 
+// 将 rawMax 向上取到最近的"整数"：单位 = max(10, 10^(floor(log10(val))-1))
+function ceilNice(val) {
+  if (!val || val <= 0) return 30
+  const unit = Math.max(10, Math.pow(10, Math.floor(Math.log10(val)) - 1))
+  return Math.ceil(val / unit) * unit
+}
+
+// ── Y 轴刻度线 + 标注 ─────────────────────────────────────────
+function drawYAxisOverlay(ctx, w, drawH, maxVal) {
+  const unit = props.yUnit
+  const pad = leftPad()
+  const yForVal = v => Math.round(4 + drawH - (v / maxVal) * drawH * 0.9)
+  const levels = [
+    { val: maxVal,                      y: yForVal(maxVal)           },
+    { val: Math.round(maxVal * 2 / 3),  y: yForVal(maxVal * 2 / 3)  },
+    { val: Math.round(maxVal / 3),      y: yForVal(maxVal / 3)      }
+  ]
+  levels.forEach(({ val, y }) => {
+    // 横向虚线网格（从刻度文字区域之后开始绘制，避免穿过标签）
+    ctx.setStrokeStyle('rgba(0,0,0,0.07)')
+    ctx.setLineWidth(0.5)
+    ctx.setLineDash([4, 4])
+    ctx.beginPath()
+    ctx.moveTo(pad, y)
+    ctx.lineTo(w, y)
+    ctx.stroke()
+    ctx.setLineDash([])
+
+    // 刻度值标注：右对齐到 pad 处，文字垂直居中于网格线
+    const label = unit ? `${val}${unit}` : String(val)
+    ctx.setFillStyle('rgba(140,140,140,0.92)')
+    ctx.setFontSize(9)
+    ctx.setTextAlign('right')
+    ctx.fillText(label, pad - 3, y + 3)
+  })
+}
+
 // ── 折线图（含 touch highlight + 峰值标注）──────────────────────
 function drawLine(ctx, w, drawH, h, maxVal, hoveredIdx = -1) {
   const n = props.data.length
-  const stepX = n > 1 ? (w - 8) / (n - 1) : w
+  const pad = leftPad()
+  const stepX = n > 1 ? (w - pad - 4) / (n - 1) : (w - pad)
 
   const pts = props.data.map((val, i) => ({
-    x: 4 + i * stepX,
+    x: pad + i * stepX,
     y: val != null ? 4 + drawH - (val / maxVal) * drawH * 0.9 : null
   }))
   const validPts = pts.filter(p => p.y != null)
@@ -443,7 +524,8 @@ function drawLine(ctx, w, drawH, h, maxVal, hoveredIdx = -1) {
     ctx.stroke()
 
     // tooltip 气泡
-    drawTooltip(ctx, w, pt.x, pt.y, String(props.data[hoveredIdx]))
+    const _tipVal = props.data[hoveredIdx]
+    drawTooltip(ctx, w, pt.x, pt.y, props.yUnit ? String(_tipVal) + props.yUnit : String(_tipVal))
   }
 
   // ── 常驻峰值标注（showPeak=true 且未触摸该点时显示）──────────
@@ -461,7 +543,7 @@ function drawLine(ctx, w, drawH, h, maxVal, hoveredIdx = -1) {
       ctx.fill()
 
       // 红色无箭头标签，紧贴圆点上方
-      const text  = '▲ ' + String(peakVal)
+      const text  = '▲ ' + String(peakVal) + (props.yUnit || '')
       const FONT  = 10
       const PAD_X = 8
       const PAD_Y = 4

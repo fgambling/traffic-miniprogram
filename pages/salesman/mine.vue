@@ -15,6 +15,27 @@
 
     <scroll-view class="scroll-area" scroll-y>
 
+      <!-- 档案信息 -->
+      <view class="section-label">档案信息</view>
+      <view class="info-card">
+        <view class="info-row">
+          <text class="info-label">所属地区</text>
+          <text class="info-value">{{ [profile.province, profile.city, profile.adminDistrict].filter(Boolean).join(' · ') || '—' }}</text>
+        </view>
+        <view class="info-row">
+          <text class="info-label">所属片区</text>
+          <text class="info-value">{{ profile.district || '—' }}</text>
+        </view>
+        <view class="info-row">
+          <text class="info-label">所属行业</text>
+          <text class="info-value">{{ profile.industry || '—' }}</text>
+        </view>
+        <view class="info-row">
+          <text class="info-label">员工类别</text>
+          <text class="info-value">{{ CATEGORY_LABEL[profile.employeeCategory] || '—' }}</text>
+        </view>
+      </view>
+
       <!-- 账号设置 -->
       <view class="section-label">账号设置</view>
       <view class="menu-card">
@@ -64,6 +85,23 @@
           <input v-model="editForm.phone" class="form-input" placeholder="请输入手机号" type="number" />
           <text class="form-tip">⚠️ 手机号同时作为登录账号，修改后需用新号重新登录</text>
         </view>
+        <view class="form-item">
+          <text class="form-label">所属省市 <text class="required">*</text></text>
+          <picker mode="region" :value="regionPickerValue" @change="onRegionChange">
+            <view class="form-input picker-input">
+              <text :class="regionDisplay ? '' : 'picker-placeholder'">{{ regionDisplay || '请选择省 / 市' }}</text>
+              <text class="picker-arrow">›</text>
+            </view>
+          </picker>
+        </view>
+        <view class="form-item">
+          <text class="form-label">所属片区</text>
+          <input v-model="editForm.district" class="form-input" placeholder="如：天河片区（选填）" />
+        </view>
+        <view class="form-item">
+          <text class="form-label">所属行业</text>
+          <input v-model="editForm.industry" class="form-input" placeholder="如：餐饮（选填）" />
+        </view>
         <button class="btn-submit" @click="submitEdit" :disabled="submittingEdit">
           {{ submittingEdit ? '保存中...' : '保存' }}
         </button>
@@ -104,25 +142,60 @@ import { get, put } from '../../utils/request.js'
 const { state, logout } = useUserStore()
 const userInfo = state.userInfo
 
-const profile = ref({ id: '', name: '', phone: '', totalCommission: 0, balance: 0, status: 1 })
+const profile = ref({ id: '', name: '', phone: '', totalCommission: 0, balance: 0, status: 1, province: '', city: '', adminDistrict: '', district: '', industry: '', employeeCategory: null })
+
+const CATEGORY_LABEL = { 1: '全职', 2: '兼职', 3: '总公司员工', 4: '分公司员工' }
 const avatarText = computed(() => (profile.value.name || userInfo?.nickname || '业')[0])
 
 // ─── 修改信息 ─────────────────────────────────────────────
 const showEditSheet = ref(false)
-const editForm = ref({ name: '', phone: '' })
+const editForm = ref({ name: '', phone: '', province: '', city: '', adminDistrict: '', district: '', industry: '' })
+
+const regionPickerValue = computed(() => [
+  editForm.value.province     || '',
+  editForm.value.city         || '',
+  editForm.value.adminDistrict|| ''
+])
+const regionDisplay = computed(() =>
+  [editForm.value.province, editForm.value.city, editForm.value.adminDistrict].filter(Boolean).join(' · ')
+)
+function onRegionChange(e) {
+  const [province, city, adminDistrict] = e.detail.value
+  editForm.value.province      = province
+  editForm.value.city          = city
+  editForm.value.adminDistrict = adminDistrict
+}
 const submittingEdit = ref(false)
 
 function openEdit() {
-  editForm.value = { name: profile.value.name, phone: profile.value.phone }
+  editForm.value = {
+    name:         profile.value.name,
+    phone:        profile.value.phone,
+    province:     profile.value.province,
+    city:         profile.value.city,
+    adminDistrict:profile.value.adminDistrict,
+    district:     profile.value.district,
+    industry:     profile.value.industry
+  }
   showEditSheet.value = true
 }
 
 async function submitEdit() {
-  if (!editForm.value.name.trim()) { uni.showToast({ title: '姓名不能为空', icon: 'none' }); return }
-  if (!editForm.value.phone.trim()) { uni.showToast({ title: '手机号不能为空', icon: 'none' }); return }
+  if (!editForm.value.name.trim())     { uni.showToast({ title: '姓名不能为空',     icon: 'none' }); return }
+  if (!editForm.value.phone.trim())    { uni.showToast({ title: '手机号不能为空',   icon: 'none' }); return }
+  if (!editForm.value.province.trim()) { uni.showToast({ title: '所属省份不能为空', icon: 'none' }); return }
+  if (!editForm.value.city.trim())     { uni.showToast({ title: '所属城市不能为空', icon: 'none' }); return }
   submittingEdit.value = true
   try {
-    await put('/api/salesman/profile', { name: editForm.value.name.trim(), phone: editForm.value.phone.trim() })
+    await put('/api/salesman/profile', {
+      name:         editForm.value.name.trim(),
+      phone:        editForm.value.phone.trim(),
+      province:     editForm.value.province.trim(),
+      city:         editForm.value.city.trim(),
+      adminDistrict:editForm.value.adminDistrict.trim(),
+      district:     editForm.value.district.trim(),
+      industry:     editForm.value.industry.trim()
+    })
     await fetchProfile()
     uni.showToast({ title: '信息已更新', icon: 'success' })
     showEditSheet.value = false
@@ -172,7 +245,13 @@ async function fetchProfile() {
       phone: data.phone || '',
       totalCommission: Number(data.totalCommission) || 0,
       balance: Number(data.balance) || 0,
-      status: data.status ?? 1
+      status: data.status ?? 1,
+      province:      data.province      || '',
+      city:          data.city          || '',
+      adminDistrict: data.adminDistrict || '',
+      district:      data.district      || '',
+      industry:      data.industry      || '',
+      employeeCategory: data.employeeCategory || null
     }
   } catch (e) {}
 }
@@ -275,6 +354,41 @@ function confirmLogout() {
   text-transform: uppercase;
 }
 
+/* ── Info card (read-only profile fields) ── */
+.info-card {
+  background: #fff;
+  margin: 0 32rpx;
+  border-radius: 24rpx;
+  overflow: hidden;
+  box-shadow: 0 2rpx 16rpx rgba(0, 0, 0, 0.05);
+  padding: 8rpx 32rpx;
+}
+
+.info-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx 0;
+  border-bottom: 1rpx solid #f2f2f2;
+
+  &:last-child { border-bottom: none; }
+}
+
+.info-label {
+  font-size: 28rpx;
+  color: #888;
+  flex-shrink: 0;
+  margin-right: 20rpx;
+}
+
+.info-value {
+  font-size: 28rpx;
+  color: #1a1a2e;
+  font-weight: 500;
+  text-align: right;
+  flex: 1;
+}
+
 /* ── Menu card ── */
 .menu-card {
   background: #fff;
@@ -348,6 +462,21 @@ function confirmLogout() {
       font-size: 28rpx;
       color: #333;
       box-sizing: border-box;
+    }
+
+    .picker-input {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .picker-placeholder { color: #bbb; }
+
+    .picker-arrow {
+      font-size: 36rpx;
+      color: #ccc;
+      font-weight: 300;
+      line-height: 1;
     }
 
     .form-tip {

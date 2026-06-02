@@ -3,7 +3,7 @@
     <view class="page-header">
       <view :style="{ height: statusBarHeight + 'px' }" />
       <view class="nav-bar">
-        <view class="header-title">AI 经营建议</view>
+        <view class="header-title">经营建议</view>
         <view class="pkg-badge" :class="pkgBadgeClass">{{ pkgBadgeText }}</view>
       </view>
       <view class="header-sub">{{ headerSubText }}</view>
@@ -46,12 +46,12 @@
           class="source-tab"
           :class="{ active: sourceTab === 1 }"
           @click="switchSourceTab(1)"
-        >AI 大模型</view>
+        >AI开财经营建议</view>
         <view
           class="source-tab"
           :class="{ active: sourceTab === 0 }"
           @click="switchSourceTab(0)"
-        >规则引擎</view>
+        >逐项措施建议</view>
       </view>
 
       <!-- 两个 Tab 共用类型筛选按钮 -->
@@ -81,13 +81,13 @@
               <view v-else-if="advice.confidence === '中'" class="ac-conf-tag conf-mid">中</view>
               <view v-else-if="advice.confidence === '低'" class="ac-conf-tag conf-low">低</view>
             </view>
-            <view class="ac-desc">{{ advice.content }}</view>
+            <view class="ac-desc">{{ stripMd(advice.content) }}…</view>
             <view class="ac-time">{{ advice.createdAt }}</view>
           </view>
         </view>
         <view v-else-if="!loading" class="empty-state">
           <text class="empty-icon">✨</text>
-          <text class="empty-title">暂无 AI 大模型建议</text>
+          <text class="empty-title">暂无AI开财经营建议</text>
           <text class="empty-sub">点击右下角按钮立即生成</text>
         </view>
       </template>
@@ -111,7 +111,7 @@
         </view>
         <view v-else-if="!loading" class="empty-state">
           <text class="empty-icon">💡</text>
-          <text class="empty-title">暂无规则引擎建议</text>
+          <text class="empty-title">暂无逐项措施建议</text>
           <text class="empty-sub">系统每 15 分钟自动检测并生成建议</text>
         </view>
       </template>
@@ -242,7 +242,7 @@
       @close="showDetailSheet = false"
     >
       <view v-if="currentAdvice" class="detail-body">
-        <view class="detail-content">{{ currentAdvice.content }}</view>
+        <rich-text class="detail-content" :nodes="mdToHtml(currentAdvice.content)" />
         <view class="feedback-row">
           <button
             class="fb-btn"
@@ -302,6 +302,37 @@ import BottomSheet from '../../components/BottomSheet.vue'
 import { statusBarHeight } from '../../utils/system.js'
 import { get, post, BASE_URL } from '../../utils/request.js'
 
+// ── Markdown → HTML（rich-text 用） ──────────────────────────
+function mdToHtml(md) {
+  if (!md) return ''
+  let html = md
+    // 代码块先保护（不处理内部内容）
+    .replace(/```[\s\S]*?```/g, '')
+    // 加粗
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    // 标题 ## → <b>
+    .replace(/^#{1,3}\s+(.+)$/gm, '<b style="font-size:15px;color:#1f4788;">$1</b>')
+    // 无序列表 - item → <li>
+    .replace(/^[-•]\s+(.+)$/gm, '<li style="margin:6px 0 0 12px;color:#333;">$1</li>')
+    // 换行
+    .replace(/\n/g, '<br/>')
+    // 包裹 li
+    .replace(/(<li[^>]*>.*?<\/li>)/g, '$1')
+  return html
+}
+
+// 卡片预览：去掉 markdown 符号，截取前80字
+function stripMd(md) {
+  if (!md) return ''
+  return md
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/^#{1,3}\s+/gm, '')
+    .replace(/^[-•]\s+/gm, '')
+    .replace(/\n+/g, ' ')
+    .trim()
+    .slice(0, 80)
+}
+
 // ── 类型色彩映射 ──────────────────────────────────────────────
 const typeColorMap = {
   备货: { color: '#1a4a8a', tagBg: '#e4edfa' },
@@ -318,7 +349,7 @@ const pkgBadgeText = computed(() => ['', '普通版', '中级版', '高级版'][
 const pkgBadgeClass = computed(() => ['', 'badge-basic', 'badge-mid', 'badge-advanced'][packageType.value] || 'badge-mid')
 const headerSubText = computed(() => {
   if (packageType.value === 1) return '升级中级版即可解锁智能经营建议'
-  if (packageType.value === 3) return '规则建议 + AI 大模型'
+  if (packageType.value === 3) return '结合本店客群和现阶段实际经营情况的经营分析及建议'
   return '基于规则引擎的实时经营建议'
 })
 
@@ -885,9 +916,9 @@ function generateAdvice() {
   .detail-content {
     font-size: 26rpx;
     color: #333;
-    line-height: 1.8;
+    line-height: 1.9;
     margin-bottom: 24rpx;
-    white-space: pre-line;
+    display: block;
   }
 
   .feedback-row {

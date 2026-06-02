@@ -110,7 +110,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useUserStore } from '../../store/user.js'
 import { post } from '../../utils/request.js'
 
@@ -125,6 +125,38 @@ const showSelectSheet   = ref(false)
 const merchantList      = ref([])
 const { login } = useUserStore()
 
+// ─── 读取已保存的登录信息 ──────────────────────────────────────
+onMounted(() => {
+  try {
+    const mp = uni.getStorageSync('login_merchant_phone')
+    const mw = uni.getStorageSync('login_merchant_pwd')
+    const sp = uni.getStorageSync('login_salesman_phone')
+    const sw = uni.getStorageSync('login_salesman_pwd')
+    const lastRole = uni.getStorageSync('login_last_role')
+    if (mp) merchantPhone.value    = mp
+    if (mw) merchantPassword.value = mw
+    if (sp) salesmanPhone.value    = sp
+    if (sw) salesmanPassword.value = sw
+    // 自动展开上次使用的身份表单
+    if (lastRole === 'merchant' && mp) showMerchantForm.value = true
+    if (lastRole === 'salesman' && sp) showSalesmanForm.value = true
+  } catch (_) {}
+})
+
+function saveCredentials(role, phone, pwd) {
+  try {
+    if (role === 'merchant') {
+      uni.setStorageSync('login_merchant_phone', phone)
+      uni.setStorageSync('login_merchant_pwd',   pwd)
+    } else {
+      uni.setStorageSync('login_salesman_phone', phone)
+      uni.setStorageSync('login_salesman_pwd',   pwd)
+    }
+    uni.setStorageSync('login_last_role', role)
+  } catch (_) {}
+}
+
+// ─── 商家登录 ─────────────────────────────────────────────────
 function doMerchantLogin(data) {
   login({
     token:      data.token,
@@ -151,6 +183,7 @@ async function merchantLogin() {
       merchantList.value = data.merchants
       showSelectSheet.value = true
     } else {
+      saveCredentials('merchant', merchantPhone.value, merchantPassword.value)
       doMerchantLogin(data)
     }
   } catch (e) {
@@ -169,6 +202,7 @@ async function selectMerchant(merchantId) {
       phone:      merchantPhone.value,
       merchantId: merchantId
     }, { showLoad: false })
+    saveCredentials('merchant', merchantPhone.value, merchantPassword.value)
     doMerchantLogin(data)
   } catch (e) {
     uni.showToast({ title: '登录失败，请重试', icon: 'none' })
@@ -177,6 +211,7 @@ async function selectMerchant(merchantId) {
   }
 }
 
+// ─── 业务员登录 ───────────────────────────────────────────────
 async function salesmanLogin() {
   if (!salesmanPhone.value || !salesmanPassword.value) {
     uni.showToast({ title: '请填写手机号和密码', icon: 'none' }); return
@@ -187,6 +222,7 @@ async function salesmanLogin() {
       phone:    salesmanPhone.value,
       password: salesmanPassword.value
     }, { showLoad: false })
+    saveCredentials('salesman', salesmanPhone.value, salesmanPassword.value)
     login({
       token:    data.token,
       role:     data.role,
@@ -201,8 +237,6 @@ async function salesmanLogin() {
     loading.value = false
   }
 }
-
-
 </script>
 
 <style lang="scss" scoped>
