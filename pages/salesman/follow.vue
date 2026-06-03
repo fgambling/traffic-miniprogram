@@ -239,8 +239,13 @@
             <!-- 已合作：合作证明图片 -->
             <view v-if="newStatus === 2" class="voucher-section" style="margin-top:8rpx">
               <text class="pf-label">合作证明图片</text>
-              <view v-if="detailVoucherUrl" class="voucher-preview" @click="previewVoucher">
-                <image :src="toFullUrl(detailVoucherUrl)" class="voucher-img" mode="aspectFill" />
+              <view v-if="detailVoucherUrl || detailVoucherPreviewUrl" class="voucher-preview" @click="previewVoucher">
+                <image
+                  :key="detailVoucherPreviewUrl || detailVoucherUrl"
+                  :src="detailVoucherPreviewUrl || displayImageUrl(detailVoucherUrl)"
+                  class="voucher-img"
+                  mode="aspectFill"
+                />
                 <view class="voucher-change" @click.stop="chooseVoucher">重新上传</view>
               </view>
               <button v-else class="btn-voucher" @click="chooseVoucher">📷 上传合作证明</button>
@@ -274,8 +279,8 @@
           />
           <!-- 图片附件 -->
           <view v-if="newRecordImageUrl" class="record-img-preview" @click="previewRecordImg">
-            <image :src="toFullUrl(newRecordImageUrl)" class="record-img" mode="aspectFill" />
-            <view class="record-img-remove" @click.stop="newRecordImageUrl = ''">✕</view>
+            <image :src="newRecordImagePreviewUrl || displayImageUrl(newRecordImageUrl)" class="record-img" mode="aspectFill" />
+            <view class="record-img-remove" @click.stop="clearRecordImage">✕</view>
           </view>
           <view v-else class="btn-add-img" @click="chooseRecordImage">
             <text>📷 添加图片（选填）</text>
@@ -306,7 +311,7 @@
             <view class="biz-img-row">
               <view v-for="(img, idx) in bizForm.menuImages" :key="idx" class="biz-img-item"
                 @click="previewBizImg(img, bizForm.menuImages)">
-                <image :src="img" class="biz-img-thumb" mode="aspectFill" />
+                <image :src="displayImageUrl(img)" class="biz-img-thumb" mode="aspectFill" />
                 <view class="biz-img-del" @click.stop="removeBizImg('menu', idx)">✕</view>
               </view>
               <view v-if="bizForm.menuImages.length < 3" class="biz-img-add" @click="chooseBizImg('menu')">
@@ -320,7 +325,7 @@
             <view class="biz-img-row">
               <view v-for="(img, idx) in bizForm.promotionImages" :key="idx" class="biz-img-item"
                 @click="previewBizImg(img, bizForm.promotionImages)">
-                <image :src="img" class="biz-img-thumb" mode="aspectFill" />
+                <image :src="displayImageUrl(img)" class="biz-img-thumb" mode="aspectFill" />
                 <view class="biz-img-del" @click.stop="removeBizImg('promotion', idx)">✕</view>
               </view>
               <view v-if="bizForm.promotionImages.length < 3" class="biz-img-add" @click="chooseBizImg('promotion')">
@@ -360,8 +365,8 @@
                   {{ rec.type === 'status' ? '状态' : '记录' }}
                 </view>
                 <text class="hi-content">{{ rec.content }}</text>
-                <image v-if="rec.imageUrl" :src="toFullUrl(rec.imageUrl)" class="hi-img" mode="aspectFill"
-                  @click="uni.previewImage({ urls: [toFullUrl(rec.imageUrl)], current: toFullUrl(rec.imageUrl) })" />
+                <image v-if="rec.imageUrl" :src="displayImageUrl(rec.imageUrl)" class="hi-img" mode="aspectFill"
+                  @click="previewImageUrl(rec.imageUrl)" />
                 <text class="hi-time">{{ formatDateTime(rec.createdAt) }}</text>
               </view>
             </view>
@@ -398,13 +403,14 @@
         <view class="form-item">
           <text class="form-label">门店实拍图 *</text>
           <view v-if="form.storePhotoUrl" class="store-photo-preview" @click="previewStorePhoto">
-            <image :src="toFullUrl(form.storePhotoUrl)" class="store-photo-img" mode="aspectFill" />
+            <image :key="storePhotoPreviewUrl || form.storePhotoUrl" :src="storePhotoPreviewUrl || toFullUrl(form.storePhotoUrl)" class="store-photo-img" mode="aspectFill" />
             <view class="store-photo-change" @click.stop="chooseStorePhoto">重新拍摄</view>
           </view>
           <view v-else class="btn-store-photo" @click="chooseStorePhoto">
             <text class="store-photo-icon">📷</text>
-            <text class="store-photo-text">{{ storePhotoUploading ? '上传中...' : '拍摄或上传门店照片' }}</text>
+            <text class="store-photo-text">{{ storePhotoUploading ? '处理中...' : '拍摄门店照片（自动加水印）' }}</text>
           </view>
+          <text class="store-photo-tip">仅支持现场拍摄，会自动添加拍摄时间和地址水印</text>
         </view>
         <view class="form-item">
           <text class="form-label">备注（选填）</text>
@@ -413,11 +419,18 @@
         <button class="btn-submit" @click="submitAdd" :disabled="storePhotoUploading">确认添加</button>
       </view>
     </BottomSheet>
+
+    <!-- 水印渲染用的隐藏 canvas（绝对定位到屏幕外，避免影响布局） -->
+    <canvas
+      canvas-id="watermark-canvas"
+      class="watermark-canvas"
+      :style="`width: ${wmCanvasW}px; height: ${wmCanvasH}px;`"
+    />
   </view>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, getCurrentInstance } from 'vue'
 import TabBar from '../../components/TabBar.vue'
 import FollowCard from '../../components/FollowCard.vue'
 import BottomSheet from '../../components/BottomSheet.vue'
@@ -432,8 +445,10 @@ const showDetailSheet = ref(false)
 const currentItem = ref(null)
 const detailStatus = ref(1)
 const detailVoucherUrl = ref('')
+const detailVoucherPreviewUrl = ref('')
 const voucherUploading = ref(false)
 const followHistory = ref([])
+const imageCache = ref({})
 const coSalesmen = ref([])
 const refreshing = ref(false)
 const joinRequests = ref([])  // 收到的联合跟进申请
@@ -482,9 +497,10 @@ async function loadBizInfo(merchantId) {
         promotions:     data.promotions     || '',
         businessHours:  data.businessHours  || '',
         targetAudience: data.targetAudience || '',
-        menuImages:     (data.menuImages     || []).map(u => toFullUrl(u)),
-        promotionImages:(data.promotionImages || []).map(u => toFullUrl(u)),
+        menuImages:     data.menuImages      || [],
+        promotionImages:data.promotionImages || [],
       }
+      preloadImages([...bizForm.value.menuImages, ...bizForm.value.promotionImages])
     }
   } catch (_) {}
   bizLoading.value = false
@@ -536,7 +552,9 @@ function uploadBizImg(tempPath, target) {
       try {
         const body = JSON.parse(res.data)
         if (body.code !== 0) throw new Error(body.message || '上传失败')
-        bizImgArr(target).push(toFullUrl(body.data.url))
+        const url = body.data.url
+        imageCache.value = { ...imageCache.value, [url]: tempPath, [toFullUrl(url)]: tempPath }
+        bizImgArr(target).push(url)
         uni.showToast({ title: '上传成功', icon: 'success' })
       } catch (e) {
         uni.showToast({ title: e.message || '上传失败', icon: 'none' })
@@ -552,7 +570,7 @@ function removeBizImg(target, idx) {
 }
 
 function previewBizImg(url, list) {
-  uni.previewImage({ urls: list.map(u => toFullUrl(u)), current: toFullUrl(url) })
+  uni.previewImage({ urls: list.map(displayImageUrl), current: displayImageUrl(url) })
 }
 
 // ─── 更改信息面板 ────────────────────────────────────────────
@@ -568,6 +586,7 @@ const cooperationAmount = ref('')
 // ─── 添加记录面板 ────────────────────────────────────────────
 const newRecordContent = ref('')
 const newRecordImageUrl = ref('')
+const newRecordImagePreviewUrl = ref('')
 const recordImgUploading = ref(false)
 const submittingRecord = ref(false)
 
@@ -723,6 +742,8 @@ async function openDetail(item) {
   // 审批失败时默认回到接洽中，因为 5 不是可选状态
   newStatus.value = item.statusVal === 5 ? 1 : item.statusVal
   detailVoucherUrl.value = item.voucherUrl || ''
+  detailVoucherPreviewUrl.value = ''
+  if (detailVoucherUrl.value) cacheImageUrl(detailVoucherUrl.value)
   statusRemark.value = ''
   cooperationAmount.value = ''
   followHistory.value = []
@@ -743,7 +764,10 @@ async function openDetail(item) {
     get(`/api/salesman/follow/${item.id}/records`, {}, { showLoad: false }),
     get(`/api/salesman/merchant/${item.merchantId}/followers`, {}, { showLoad: false })
   ])
-  if (histRes.status === 'fulfilled') followHistory.value = histRes.value || []
+  if (histRes.status === 'fulfilled') {
+    followHistory.value = histRes.value || []
+    preloadHistoryImages(followHistory.value)
+  }
   if (coRes.status === 'fulfilled') coSalesmen.value = coRes.value || []
 }
 
@@ -796,6 +820,10 @@ async function saveStatus() {
     uni.showToast({ title: '请填写合作金额', icon: 'none' })
     return
   }
+  if (voucherUploading.value) {
+    uni.showToast({ title: '合作证明上传中，请稍候', icon: 'none' })
+    return
+  }
   savingStatus.value = true
   try {
     const body = {
@@ -813,10 +841,13 @@ async function saveStatus() {
       currentItem.value = updatedItem
       detailStatus.value = updatedItem.statusVal
       newStatus.value = updatedItem.statusVal === 5 ? 1 : updatedItem.statusVal
+      detailVoucherUrl.value = updatedItem.voucherUrl || detailVoucherUrl.value
+      if (detailVoucherUrl.value) cacheImageUrl(detailVoucherUrl.value)
     }
     // 刷新历史记录
     const histRes = await get(`/api/salesman/follow/${currentItem.value.id}/records`, {}, { showLoad: false }).catch(() => [])
     followHistory.value = histRes || []
+    preloadHistoryImages(followHistory.value)
     uni.showToast({ title: '状态已更新', icon: 'success' })
     activePanel.value = null
   } catch (e) {
@@ -860,9 +891,11 @@ async function submitRecord() {
     })
     newRecordContent.value = ''
     newRecordImageUrl.value = ''
+    newRecordImagePreviewUrl.value = ''
     // 刷新历史记录
     const histRes = await get(`/api/salesman/follow/${currentItem.value.id}/records`, {}, { showLoad: false }).catch(() => [])
     followHistory.value = histRes || []
+    preloadHistoryImages(followHistory.value)
     uni.showToast({ title: '记录已添加', icon: 'success' })
     activePanel.value = null
   } catch (_) {
@@ -879,6 +912,45 @@ function toFullUrl(url) {
   return BASE_URL + url                    // 新数据是相对路径，拼上 BASE_URL
 }
 
+function displayImageUrl(url) {
+  if (!url) return ''
+  return imageCache.value[url] || imageCache.value[toFullUrl(url)] || toFullUrl(url)
+}
+
+function cacheImageUrl(url) {
+  if (!url) return
+  const full = toFullUrl(url)
+  if (!full.startsWith('http') || imageCache.value[url] || imageCache.value[full]) return
+
+  uni.downloadFile({
+    url: full,
+    success: (res) => {
+      if (res.statusCode === 200 && res.tempFilePath) {
+        imageCache.value = {
+          ...imageCache.value,
+          [url]: res.tempFilePath,
+          [full]: res.tempFilePath
+        }
+      }
+    }
+  })
+}
+
+function preloadHistoryImages(records = []) {
+  records.forEach(rec => {
+    if (rec?.imageUrl) cacheImageUrl(rec.imageUrl)
+  })
+}
+
+function preloadImages(urls = []) {
+  urls.forEach(cacheImageUrl)
+}
+
+function previewImageUrl(url) {
+  const src = displayImageUrl(url)
+  if (src) uni.previewImage({ urls: [src], current: src })
+}
+
 function chooseRecordImage() {
   uni.chooseImage({
     count: 1,
@@ -888,9 +960,14 @@ function chooseRecordImage() {
   })
 }
 
+function clearRecordImage() {
+  newRecordImageUrl.value = ''
+  newRecordImagePreviewUrl.value = ''
+}
+
 function previewRecordImg() {
   if (newRecordImageUrl.value) {
-    const full = toFullUrl(newRecordImageUrl.value)
+    const full = newRecordImagePreviewUrl.value || displayImageUrl(newRecordImageUrl.value)
     uni.previewImage({ urls: [full], current: full })
   }
 }
@@ -901,15 +978,17 @@ function chooseVoucher() {
     count: 1,
     sizeType: ['compressed'],
     sourceType: ['album', 'camera'],
-    success: (res) => { uploadImage(res.tempFilePaths[0], 'voucher') }
+    success: (res) => {
+      const tempPath = res.tempFilePaths[0]
+      detailVoucherPreviewUrl.value = tempPath
+      uploadImage(tempPath, 'voucher')
+    }
   })
 }
 
 function previewVoucher() {
-  if (detailVoucherUrl.value) {
-    const full = toFullUrl(detailVoucherUrl.value)
-    uni.previewImage({ urls: [full], current: full })
-  }
+  const full = detailVoucherPreviewUrl.value || displayImageUrl(detailVoucherUrl.value)
+  if (full) uni.previewImage({ urls: [full], current: full })
 }
 
 function uploadImage(tempPath, target) {
@@ -928,9 +1007,12 @@ function uploadImage(tempPath, target) {
         const url = body.data.url   // 存相对路径，显示时动态拼 BASE_URL
         if (target === 'voucher') {
           detailVoucherUrl.value = url
+          detailVoucherPreviewUrl.value = tempPath
+          imageCache.value = { ...imageCache.value, [url]: tempPath, [toFullUrl(url)]: tempPath }
           uni.showToast({ title: '凭证已上传', icon: 'success' })
         } else {
           newRecordImageUrl.value = url
+          newRecordImagePreviewUrl.value = tempPath
           uni.showToast({ title: '图片已上传', icon: 'success' })
         }
       } catch (e) {
@@ -948,42 +1030,152 @@ function uploadImage(tempPath, target) {
 // ─── 新增商家 ────────────────────────────────────────────────
 const form = ref({ name: '', contact: '', phone: '', address: '', license: '', storePhotoUrl: '', remark: '', status: 1 })
 const storePhotoUploading = ref(false)
+const storePhotoPreviewUrl = ref('')
 
-function chooseStorePhoto() {
+// 水印 canvas 尺寸（px），按拍摄图片真实宽高动态设置
+const wmCanvasW = ref(300)
+const wmCanvasH = ref(400)
+const { proxy: followProxy } = getCurrentInstance()
+
+// 拍摄 → 选地址 → 水印合成 → 上传
+async function chooseStorePhoto() {
   if (storePhotoUploading.value) return
-  uni.chooseImage({
-    count: 1,
-    sizeType: ['compressed'],
-    sourceType: ['album', 'camera'],
-    success: (res) => { uploadStorePhoto(res.tempFilePaths[0]) }
+  // 步骤1：只允许拍照，不允许相册
+  let tempPath
+  try {
+    const camRes = await new Promise((resolve, reject) => {
+      uni.chooseImage({
+        count: 1,
+        sizeType: ['compressed'],
+        sourceType: ['camera'],
+        success: resolve,
+        fail: reject
+      })
+    })
+    tempPath = camRes.tempFilePaths[0]
+  } catch (_) {
+    return  // 用户取消
+  }
+
+  // 步骤2：让用户在地图上确认地址
+  let address = ''
+  try {
+    const locRes = await new Promise((resolve, reject) => {
+      uni.chooseLocation({ success: resolve, fail: reject })
+    })
+    // chooseLocation 返回 name(POI名)、address(街道地址)
+    address = locRes.name && locRes.address
+      ? `${locRes.name} · ${locRes.address}`
+      : (locRes.name || locRes.address || '')
+  } catch (_) {
+    uni.showToast({ title: '已取消，请重新拍摄并选择地址', icon: 'none' })
+    return
+  }
+
+  // 步骤3：用 canvas 把时间+地址水印画到照片上
+  storePhotoUploading.value = true
+  uni.showLoading({ title: '处理图片...', mask: true })
+  try {
+    const watermarkedPath = await addWatermark(tempPath, address)
+    await uploadStorePhotoFile(watermarkedPath)
+  } catch (e) {
+    uni.showToast({ title: e.message || '处理失败', icon: 'none' })
+  } finally {
+    uni.hideLoading()
+    storePhotoUploading.value = false
+  }
+}
+
+// 在 canvas 上合成水印，返回新图片的临时路径
+function addWatermark(srcPath, address) {
+  return new Promise((resolve, reject) => {
+    uni.getImageInfo({
+      src: srcPath,
+      success: (info) => {
+        // 限制最大边长 1080，避免高分辨率手机 canvas 超大慢
+        const MAX = 1080
+        let w = info.width, h = info.height
+        if (Math.max(w, h) > MAX) {
+          const ratio = MAX / Math.max(w, h)
+          w = Math.round(w * ratio)
+          h = Math.round(h * ratio)
+        }
+        wmCanvasW.value = w
+        wmCanvasH.value = h
+        // 等 DOM 更新后再绘制
+        setTimeout(() => {
+          const ctx = uni.createCanvasContext('watermark-canvas', followProxy)
+          // 画原图
+          ctx.drawImage(srcPath, 0, 0, w, h)
+          // 时间字符串
+          const d = new Date()
+          const pad = n => String(n).padStart(2, '0')
+          const timeStr = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+          // 字号按图片宽度比例
+          const fontSize = Math.max(20, Math.round(w * 0.032))
+          const padX = Math.round(w * 0.03)
+          const lineGap = Math.round(fontSize * 0.4)
+          const bgH = fontSize * 2 + lineGap * 3
+          // 半透明黑底
+          ctx.setFillStyle('rgba(0,0,0,0.45)')
+          ctx.fillRect(0, h - bgH, w, bgH)
+          // 文字
+          ctx.setFillStyle('#ffffff')
+          ctx.setFontSize(fontSize)
+          ctx.setTextBaseline('top')
+          ctx.fillText('📍 ' + (address || '位置未知'), padX, h - bgH + lineGap)
+          ctx.fillText('🕒 ' + timeStr, padX, h - bgH + lineGap + fontSize + lineGap)
+          ctx.draw(false, () => {
+            // canvas 转临时文件
+            uni.canvasToTempFilePath({
+              canvasId: 'watermark-canvas',
+              x: 0, y: 0, width: w, height: h,
+              destWidth: w, destHeight: h,
+              fileType: 'jpg',
+              quality: 0.85,
+              success: (r) => resolve(r.tempFilePath),
+              fail: (err) => reject(new Error(err.errMsg || '生成水印图失败'))
+            }, followProxy)
+          })
+        }, 80)
+      },
+      fail: (err) => reject(new Error(err.errMsg || '读取图片失败'))
+    })
   })
 }
 
-function uploadStorePhoto(tempPath) {
-  storePhotoUploading.value = true
-  uni.uploadFile({
-    url: `${BASE_URL}/api/salesman/upload`,
-    filePath: tempPath,
-    name: 'file',
-    header: { Authorization: `Bearer ${getToken()}` },
-    success: (res) => {
-      try {
-        const body = JSON.parse(res.data)
-        if (body.code !== 0) throw new Error(body.message || '上传失败')
-        form.value.storePhotoUrl = body.data.url
-        uni.showToast({ title: '上传成功', icon: 'success' })
-      } catch (e) {
-        uni.showToast({ title: e.message || '上传失败', icon: 'none' })
+// 上传已加水印的临时图片
+function uploadStorePhotoFile(filePath) {
+  return new Promise((resolve, reject) => {
+    uni.uploadFile({
+      url: `${BASE_URL}/api/salesman/upload`,
+      filePath,
+      name: 'file',
+      header: { Authorization: `Bearer ${getToken()}` },
+      success: (res) => {
+        try {
+          const body = JSON.parse(res.data)
+          if (body.code !== 0) throw new Error(body.message || '上传失败')
+          form.value.storePhotoUrl = body.data.url
+          storePhotoPreviewUrl.value = filePath
+          uni.showToast({ title: '已添加水印并上传', icon: 'success' })
+          resolve()
+        } catch (e) {
+          uni.showToast({ title: e.message || '上传失败', icon: 'none' })
+          reject(e)
+        }
+      },
+      fail: () => {
+        uni.showToast({ title: '上传失败，请检查网络', icon: 'none' })
+        reject(new Error('network'))
       }
-    },
-    fail: () => uni.showToast({ title: '上传失败，请检查网络', icon: 'none' }),
-    complete: () => { storePhotoUploading.value = false }
+    })
   })
 }
 
 function previewStorePhoto() {
   if (form.value.storePhotoUrl) {
-    const full = toFullUrl(form.value.storePhotoUrl)
+    const full = storePhotoPreviewUrl.value || displayImageUrl(form.value.storePhotoUrl)
     uni.previewImage({ urls: [full], current: full })
   }
 }
@@ -1067,6 +1259,7 @@ async function checkLicenseAndAdd() {
 
 function resetForm() {
   form.value = { name: '', contact: '', phone: '', address: '', license: '', storePhotoUrl: '', remark: '', status: 1 }
+  storePhotoPreviewUrl.value = ''
 }
 
 async function doAdd() {
@@ -1808,6 +2001,14 @@ onMounted(() => {
     .store-photo-text { font-size: 26rpx; color: #2d6fd6; font-weight: 500; }
   }
 
+  .store-photo-tip {
+    display: block;
+    font-size: 22rpx;
+    color: #999;
+    margin-top: 12rpx;
+    line-height: 1.5;
+  }
+
   .store-photo-preview {
     position: relative;
     border-radius: 20rpx;
@@ -1840,6 +2041,14 @@ onMounted(() => {
     box-sizing: border-box;
     padding: 0;
   }
+}
+
+/* 水印 canvas：定位到屏幕外，不影响布局，仍然能绘制 */
+.watermark-canvas {
+  position: fixed;
+  top: -9999px;
+  left: -9999px;
+  pointer-events: none;
 }
 
 /* 门店信息图片网格 */

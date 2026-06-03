@@ -81,6 +81,7 @@ function updateSize() {
 let _drawTimer  = null   // 防抖 timer
 let _drawing    = false  // 绘制进行中标志
 let _pendingIdx = -1     // 待绘制的 hoveredIdx
+let _safetyTimer = null  // 兜底重绘 timer（等原生缓冲区随尺寸放大后再画一次）
 
 function scheduleDraw(hoveredIdx = -1, delay = 80) {
   _pendingIdx = hoveredIdx
@@ -98,6 +99,7 @@ function scheduleDraw(hoveredIdx = -1, delay = 80) {
 
 onBeforeUnmount(() => {
   if (_drawTimer) clearTimeout(_drawTimer)
+  if (_safetyTimer) clearTimeout(_safetyTimer)
   // White-out the native canvas before component is destroyed so it doesn't
   // ghost behind the next tab's (possibly smaller) canvas in WeChat's native layer
   try {
@@ -110,15 +112,26 @@ onBeforeUnmount(() => {
 
 onUnmounted(() => {
   if (_drawTimer) clearTimeout(_drawTimer)
+  if (_safetyTimer) clearTimeout(_safetyTimer)
 })
 
 onMounted(() => {
   updateSize()
   scheduleDraw(-1, props.drawDelay)
+  // 兜底：旧版 canvas 缓冲区在 updateSize 放大尺寸后才异步重建，首帧 draw 可能
+  // 仍按旧（小）缓冲区裁掉底部横坐标和最右点。等缓冲区稳定后再重绘一次。
+  if (_safetyTimer) clearTimeout(_safetyTimer)
+  _safetyTimer = setTimeout(() => {
+    if (!_drawing) draw(-1)
+  }, props.drawDelay + 350)
 })
 
 watch(() => props.data, () => {
   updateSize()
+  scheduleDraw(-1, 80)
+}, { deep: true })
+
+watch(() => props.labels, () => {
   scheduleDraw(-1, 80)
 }, { deep: true })
 
@@ -224,8 +237,10 @@ function draw(hoveredIdx = -1) {
     return
   }
 
-  const LABEL_H = 18
+  const LABEL_H = 42
+  const LABEL_BASELINE_Y = h - 10
   const DRAW_H = h - LABEL_H
+  const DRAW_BOTTOM = DRAW_H + 6
   const allVals = [...props.data, ...props.compareData].filter(v => v != null)
   const rawMax  = Math.max(...allVals, 1)
   const maxVal  = ceilNice(rawMax)
@@ -236,10 +251,13 @@ function draw(hoveredIdx = -1) {
     drawBar(ctx, w, DRAW_H, h, maxVal, hoveredIdx)
   } else {
     if (props.compareData.length) drawCompareLine(ctx, w, DRAW_H, maxVal)
-    drawLine(ctx, w, DRAW_H, h, maxVal, hoveredIdx)
+    drawLine(ctx, w, DRAW_H, DRAW_BOTTOM, h, maxVal, hoveredIdx)
   }
 
   if (props.labels.length) {
+    ctx.setFillStyle('#ffffff')
+    ctx.fillRect(0, DRAW_H + 8, w, LABEL_H)
+
     const n = props.labels.length
     const isLine = props.type === 'line'
     const pad = leftPad()
@@ -258,7 +276,7 @@ function draw(hoveredIdx = -1) {
         ctx.setFillStyle('#aaa')
         ctx.setFontSize(9)
         ctx.setTextAlign(align)
-        ctx.fillText(String(lbl), x, h - 2)
+        ctx.fillText(String(lbl), x, LABEL_BASELINE_Y)
       }
     })
   }
@@ -457,7 +475,7 @@ function drawYAxisOverlay(ctx, w, drawH, maxVal) {
 }
 
 // ── 折线图（含 touch highlight + 峰值标注）──────────────────────
-function drawLine(ctx, w, drawH, h, maxVal, hoveredIdx = -1) {
+function drawLine(ctx, w, drawH, drawBottom, h, maxVal, hoveredIdx = -1) {
   const n = props.data.length
   const pad = leftPad()
   const stepX = n > 1 ? (w - pad - 4) / (n - 1) : (w - pad)
@@ -478,8 +496,8 @@ function drawLine(ctx, w, drawH, h, maxVal, hoveredIdx = -1) {
       else { ctx.lineTo(p.x, p.y) }
     })
     if (validPts.length) {
-      ctx.lineTo(validPts[validPts.length - 1].x, drawH + 4)
-      ctx.lineTo(validPts[0].x, drawH + 4)
+      ctx.lineTo(validPts[validPts.length - 1].x, drawBottom)
+      ctx.lineTo(validPts[0].x, drawBottom)
     }
     ctx.closePath()
     ctx.setFillStyle('rgba(31,71,136,.07)')
@@ -518,7 +536,7 @@ function drawLine(ctx, w, drawH, h, maxVal, hoveredIdx = -1) {
     // 垂直辅助线
     ctx.beginPath()
     ctx.moveTo(pt.x, 4)
-    ctx.lineTo(pt.x, drawH + 4)
+    ctx.lineTo(pt.x, drawBottom)
     ctx.setStrokeStyle('rgba(31,71,136,0.25)')
     ctx.setLineWidth(1)
     ctx.stroke()

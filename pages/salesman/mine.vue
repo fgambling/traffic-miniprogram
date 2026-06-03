@@ -39,29 +39,20 @@
       <!-- 账号设置 -->
       <view class="section-label">账号设置</view>
       <view class="menu-card">
-        <view class="menu-item" @click="openEdit">
-          <view class="menu-left">
-            <text class="menu-icon">👤</text>
-            <text class="menu-text">修改信息</text>
-          </view>
-          <text class="menu-arrow">›</text>
-        </view>
-        <view class="menu-divider" />
         <view class="menu-item" @click="openChangePwd">
           <view class="menu-left">
-            <text class="menu-icon">🔒</text>
             <text class="menu-text">修改密码</text>
           </view>
           <text class="menu-arrow">›</text>
         </view>
       </view>
+      <view class="info-tip">个人档案信息如需变更，请联系管理员</view>
 
       <!-- 退出登录 -->
       <view class="section-label">其他</view>
       <view class="menu-card">
         <view class="menu-item danger" @click="confirmLogout">
           <view class="menu-left">
-            <text class="menu-icon">🚪</text>
             <text class="menu-text danger-text">退出登录</text>
           </view>
           <text class="menu-arrow">›</text>
@@ -72,41 +63,6 @@
     </scroll-view>
 
     <TabBar role="salesman" :current="3" />
-
-    <!-- 修改信息弹层 -->
-    <BottomSheet :show="showEditSheet" title="修改信息" @close="showEditSheet = false">
-      <view class="form">
-        <view class="form-item">
-          <text class="form-label">姓名</text>
-          <input v-model="editForm.name" class="form-input" placeholder="请输入姓名" />
-        </view>
-        <view class="form-item">
-          <text class="form-label">联系电话</text>
-          <input v-model="editForm.phone" class="form-input" placeholder="请输入手机号" type="number" />
-          <text class="form-tip">⚠️ 手机号同时作为登录账号，修改后需用新号重新登录</text>
-        </view>
-        <view class="form-item">
-          <text class="form-label">所属省市 <text class="required">*</text></text>
-          <picker mode="region" :value="regionPickerValue" @change="onRegionChange">
-            <view class="form-input picker-input">
-              <text :class="regionDisplay ? '' : 'picker-placeholder'">{{ regionDisplay || '请选择省 / 市' }}</text>
-              <text class="picker-arrow">›</text>
-            </view>
-          </picker>
-        </view>
-        <view class="form-item">
-          <text class="form-label">所属片区</text>
-          <input v-model="editForm.district" class="form-input" placeholder="如：天河片区（选填）" />
-        </view>
-        <view class="form-item">
-          <text class="form-label">所属行业</text>
-          <input v-model="editForm.industry" class="form-input" placeholder="如：餐饮（选填）" />
-        </view>
-        <button class="btn-submit" @click="submitEdit" :disabled="submittingEdit">
-          {{ submittingEdit ? '保存中...' : '保存' }}
-        </button>
-      </view>
-    </BottomSheet>
 
     <!-- 修改密码弹层 -->
     <BottomSheet :show="showPwdSheet" title="修改密码" @close="showPwdSheet = false">
@@ -146,65 +102,6 @@ const profile = ref({ id: '', name: '', phone: '', totalCommission: 0, balance: 
 
 const CATEGORY_LABEL = { 1: '全职', 2: '兼职', 3: '总公司员工', 4: '分公司员工' }
 const avatarText = computed(() => (profile.value.name || userInfo?.nickname || '业')[0])
-
-// ─── 修改信息 ─────────────────────────────────────────────
-const showEditSheet = ref(false)
-const editForm = ref({ name: '', phone: '', province: '', city: '', adminDistrict: '', district: '', industry: '' })
-
-const regionPickerValue = computed(() => [
-  editForm.value.province     || '',
-  editForm.value.city         || '',
-  editForm.value.adminDistrict|| ''
-])
-const regionDisplay = computed(() =>
-  [editForm.value.province, editForm.value.city, editForm.value.adminDistrict].filter(Boolean).join(' · ')
-)
-function onRegionChange(e) {
-  const [province, city, adminDistrict] = e.detail.value
-  editForm.value.province      = province
-  editForm.value.city          = city
-  editForm.value.adminDistrict = adminDistrict
-}
-const submittingEdit = ref(false)
-
-function openEdit() {
-  editForm.value = {
-    name:         profile.value.name,
-    phone:        profile.value.phone,
-    province:     profile.value.province,
-    city:         profile.value.city,
-    adminDistrict:profile.value.adminDistrict,
-    district:     profile.value.district,
-    industry:     profile.value.industry
-  }
-  showEditSheet.value = true
-}
-
-async function submitEdit() {
-  if (!editForm.value.name.trim())     { uni.showToast({ title: '姓名不能为空',     icon: 'none' }); return }
-  if (!editForm.value.phone.trim())    { uni.showToast({ title: '手机号不能为空',   icon: 'none' }); return }
-  if (!editForm.value.province.trim()) { uni.showToast({ title: '所属省份不能为空', icon: 'none' }); return }
-  if (!editForm.value.city.trim())     { uni.showToast({ title: '所属城市不能为空', icon: 'none' }); return }
-  submittingEdit.value = true
-  try {
-    await put('/api/salesman/profile', {
-      name:         editForm.value.name.trim(),
-      phone:        editForm.value.phone.trim(),
-      province:     editForm.value.province.trim(),
-      city:         editForm.value.city.trim(),
-      adminDistrict:editForm.value.adminDistrict.trim(),
-      district:     editForm.value.district.trim(),
-      industry:     editForm.value.industry.trim()
-    })
-    await fetchProfile()
-    uni.showToast({ title: '信息已更新', icon: 'success' })
-    showEditSheet.value = false
-  } catch (e) {
-    uni.showToast({ title: e?.message || '保存失败', icon: 'none' })
-  } finally {
-    submittingEdit.value = false
-  }
-}
 
 // ─── 修改密码 ─────────────────────────────────────────────
 const showPwdSheet  = ref(false)
@@ -396,6 +293,14 @@ function confirmLogout() {
   border-radius: 24rpx;
   overflow: hidden;
   box-shadow: 0 2rpx 16rpx rgba(0, 0, 0, 0.05);
+}
+
+.info-tip {
+  display: block;
+  font-size: 22rpx;
+  color: #999;
+  margin: 12rpx 40rpx 0;
+  line-height: 1.5;
 }
 
 .menu-item {

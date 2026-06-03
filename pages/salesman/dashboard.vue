@@ -113,9 +113,6 @@
             class="signed-item"
           >
             <view class="si-left">
-              <view class="si-avatar" :style="{ background: item.avatarBg }">
-                <text>{{ item.icon }}</text>
-              </view>
               <view class="si-info">
                 <text class="si-name">{{ item.merchantName || '—' }}</text>
                 <text class="si-meta">{{ item.contactPerson }} · {{ fmtDate(item.cooperationTime) }}</text>
@@ -212,12 +209,6 @@ watch(
   { immediate: true, deep: true }
 )
 
-// 头像颜色池
-const iconPool  = ['🏪', '🍜', '☕', '🌸', '🥗', '👟', '💄', '🍰', '📱', '🏋️']
-const colorPool = [
-  { bg: '#fff3e0' }, { bg: '#e4edfa' }, { bg: '#fce4ec' },
-  { bg: '#e8f5e9' }, { bg: '#f3e5f5' }, { bg: '#e0f7fa' }
-]
 
 // ── 数据加载 ─────────────────────────────────────────────────
 async function loadSummary() {
@@ -249,11 +240,7 @@ async function loadSignedList(page = 1) {
   try {
     const res = await get('/api/salesman/follow/signed',
       { page, size: PAGE_SIZE }, { showLoad: false })
-    signedList.value = (res.list || []).map((vo, i) => ({
-      ...vo,
-      icon:     iconPool[i % iconPool.length],
-      avatarBg: colorPool[i % colorPool.length].bg
-    }))
+    signedList.value = res.list || []
     signedTotal.value = res.total || 0
     signedPage.value  = res.page  || 1
     signedPages.value = res.pages || 1
@@ -523,17 +510,6 @@ function goCommission() { uni.redirectTo({ url: '/pages/salesman/commission' }) 
     gap: 18rpx;
     flex: 1;
     min-width: 0;
-  }
-
-  .si-avatar {
-    width: 72rpx;
-    height: 72rpx;
-    border-radius: 18rpx;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 34rpx;
-    flex-shrink: 0;
   }
 
   .si-info {

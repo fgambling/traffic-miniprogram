@@ -54,7 +54,16 @@
         "setting" : {
             "urlCheck" : false
         },
-        "usingComponents" : true
+        "usingComponents" : true,
+        "permission" : {
+            "scope.userLocation" : {
+                "desc" : "用于在门店实拍图添加位置水印"
+            }
+        },
+        "requiredPrivateInfos" : [
+            "chooseLocation",
+            "getLocation"
+        ]
     },
     "mp-alipay" : {
         "usingComponents" : true

@@ -1,93 +1,88 @@
 <template>
   <view class="login-page">
-    <!-- 全屏深色渐变背景 -->
     <view class="bg-layer" />
-
-    <!-- 装饰圆 -->
     <view class="deco-circle deco-1" />
     <view class="deco-circle deco-2" />
 
-    <!-- 顶部品牌区 -->
+    <!-- 品牌区 -->
     <view class="brand-area">
-      <view class="brand-icon">📊</view>
-      <text class="brand-title">智慧客流分析</text>
-      <text class="brand-sub">AI 驱动 · 精准洞察 · 智慧运营</text>
+      <view class="brand-icon">
+        <image v-if="isImageLogo" :src="logoDisplayUrl" class="brand-logo-img" mode="aspectFill" />
+        <text v-else>{{ appCfg.logo }}</text>
+      </view>
+      <text class="brand-title">{{ appCfg.brandTitle }}</text>
+      <text class="brand-sub">{{ appCfg.slogan }}</text>
     </view>
 
-    <!-- 底部登录卡片 -->
+    <!-- 底部卡片 -->
     <view class="login-card">
-      <view class="card-header">
-        <view class="card-dot" />
-        <text class="card-hint">选择您的身份登录</text>
-        <view class="card-dot" />
+
+      <!-- ① 身份选择 -->
+      <view v-if="!selectedRole" class="step-select">
+        <view class="card-header">
+          <view class="card-dot" />
+          <text class="card-hint">选择您的身份登录</text>
+          <view class="card-dot" />
+        </view>
+
+        <button class="btn btn-merchant" @click="selectedRole = 'merchant'" :disabled="loading">
+          <text class="btn-text">商家端登录</text>
+        </button>
+
+        <button class="btn btn-salesman" @click="selectedRole = 'salesman'" :disabled="loading">
+          <text class="btn-text">业务员工号登录</text>
+        </button>
+
+        <view class="agree-text">
+          登录即同意
+          <text class="link">用户协议</text>
+          和
+          <text class="link">隐私政策</text>
+        </view>
       </view>
 
-      <button
-        class="btn btn-wechat"
-        @click="showMerchantForm = true; showSalesmanForm = false"
-        :disabled="loading"
-      >
-        <text class="btn-text">商家端登录</text>
-      </button>
+      <!-- ② 登录表单 -->
+      <view v-else class="step-form">
+        <view class="form-nav">
+          <view class="form-back" @click="selectedRole = null">
+            <text class="back-arrow">‹</text>
+            <text class="back-text">返回</text>
+          </view>
+          <text class="form-title">{{ selectedRole === 'merchant' ? '商家登录' : '业务员登录' }}</text>
+          <view class="form-nav-spacer" />
+        </view>
 
-      <!-- 商家手机号+密码表单 -->
-      <view v-if="showMerchantForm" class="salesman-form">
-        <view class="sf-title">商家登录</view>
         <input
-          v-model="merchantPhone"
+          v-model="currentPhone"
           class="sf-input"
           placeholder="手机号"
           type="number"
           maxlength="11"
         />
         <input
-          v-model="merchantPassword"
+          v-model="currentPassword"
           class="sf-input"
           placeholder="密码"
           password
         />
-        <button class="sf-btn sf-btn-merchant" @click="merchantLogin" :disabled="loading">
+
+        <button
+          class="sf-btn"
+          :class="selectedRole === 'merchant' ? 'sf-btn-merchant' : 'sf-btn-salesman'"
+          @click="handleLogin"
+          :disabled="loading"
+        >
           {{ loading ? '登录中...' : '登录' }}
         </button>
-        <view class="sf-cancel" @click="showMerchantForm = false">取消</view>
+
+        <view class="agree-text">
+          登录即同意
+          <text class="link">用户协议</text>
+          和
+          <text class="link">隐私政策</text>
+        </view>
       </view>
 
-      <button
-        class="btn btn-salesman"
-        @click="showSalesmanForm = true; showMerchantForm = false"
-        :disabled="loading"
-      >
-        <text class="btn-text">业务员工号登录</text>
-      </button>
-
-      <!-- 业务员手机号+密码表单 -->
-      <view v-if="showSalesmanForm" class="salesman-form">
-        <view class="sf-title">业务员登录</view>
-        <input
-          v-model="salesmanPhone"
-          class="sf-input"
-          placeholder="手机号"
-          type="number"
-          maxlength="11"
-        />
-        <input
-          v-model="salesmanPassword"
-          class="sf-input"
-          placeholder="密码"
-          password
-        />
-        <button class="sf-btn" @click="salesmanLogin" :disabled="loading">
-          {{ loading ? '登录中...' : '登录' }}
-        </button>
-        <view class="sf-cancel" @click="showSalesmanForm = false">取消</view>
-      </view>
-
-      <view class="agree-text">
-        登录即同意
-        <text class="link">用户协议</text>
-        和
-        <text class="link">隐私政策</text>
-      </view>
     </view>
 
     <!-- 多商家选择弹窗 -->
@@ -110,23 +105,50 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useUserStore } from '../../store/user.js'
-import { post } from '../../utils/request.js'
+import { post, BASE_URL } from '../../utils/request.js'
 
-const loading           = ref(false)
-const showMerchantForm  = ref(false)
-const merchantPhone     = ref('')
-const merchantPassword  = ref('')
-const showSalesmanForm  = ref(false)
-const salesmanPhone     = ref('')
-const salesmanPassword  = ref('')
-const showSelectSheet   = ref(false)
-const merchantList      = ref([])
+const loading         = ref(false)
+const selectedRole    = ref(null)   // null | 'merchant' | 'salesman'
+const appCfg      = ref({ logo: '📊', brandTitle: '智慧客流分析', slogan: 'AI 驱动 · 精准洞察 · 智慧运营' })
+const logoLocalUrl = ref('')
+const isImageLogo = computed(() => appCfg.value.logo.startsWith('/uploads/') || appCfg.value.logo.startsWith('http'))
+const logoUrl     = computed(() => {
+  const l = appCfg.value.logo
+  return l.startsWith('http') ? l : BASE_URL + l
+})
+const logoDisplayUrl = computed(() => logoLocalUrl.value || logoUrl.value)
+const merchantPhone   = ref('')
+const merchantPassword = ref('')
+const salesmanPhone   = ref('')
+const salesmanPassword = ref('')
+const showSelectSheet = ref(false)
+const merchantList    = ref([])
 const { login } = useUserStore()
 
-// ─── 读取已保存的登录信息 ──────────────────────────────────────
+const currentPhone    = computed({
+  get: () => selectedRole.value === 'merchant' ? merchantPhone.value : salesmanPhone.value,
+  set: v  => { if (selectedRole.value === 'merchant') merchantPhone.value = v; else salesmanPhone.value = v }
+})
+const currentPassword = computed({
+  get: () => selectedRole.value === 'merchant' ? merchantPassword.value : salesmanPassword.value,
+  set: v  => { if (selectedRole.value === 'merchant') merchantPassword.value = v; else salesmanPassword.value = v }
+})
+
 onMounted(() => {
+  // 拉取后台配置（logo / 品牌名 / slogan）
+  uni.request({
+    url: BASE_URL + '/api/public/app-config',
+    method: 'GET',
+    success: ({ data }) => {
+      if (data?.data) {
+        Object.assign(appCfg.value, data.data)
+        cacheLogo()
+      }
+    },
+    fail: () => {}
+  })
   try {
     const mp = uni.getStorageSync('login_merchant_phone')
     const mw = uni.getStorageSync('login_merchant_pwd')
@@ -137,11 +159,25 @@ onMounted(() => {
     if (mw) merchantPassword.value = mw
     if (sp) salesmanPhone.value    = sp
     if (sw) salesmanPassword.value = sw
-    // 自动展开上次使用的身份表单
-    if (lastRole === 'merchant' && mp) showMerchantForm.value = true
-    if (lastRole === 'salesman' && sp) showSalesmanForm.value = true
+    if (lastRole === 'merchant' && mp) selectedRole.value = 'merchant'
+    if (lastRole === 'salesman' && sp) selectedRole.value = 'salesman'
   } catch (_) {}
 })
+
+function cacheLogo() {
+  logoLocalUrl.value = ''
+  if (!isImageLogo.value) return
+  const url = logoUrl.value
+  if (!url?.startsWith('http')) return
+  uni.downloadFile({
+    url,
+    success: (res) => {
+      if (res.statusCode === 200 && res.tempFilePath) {
+        logoLocalUrl.value = res.tempFilePath
+      }
+    }
+  })
+}
 
 function saveCredentials(role, phone, pwd) {
   try {
@@ -156,15 +192,14 @@ function saveCredentials(role, phone, pwd) {
   } catch (_) {}
 }
 
+function handleLogin() {
+  if (selectedRole.value === 'merchant') merchantLogin()
+  else salesmanLogin()
+}
+
 // ─── 商家登录 ─────────────────────────────────────────────────
 function doMerchantLogin(data) {
-  login({
-    token:      data.token,
-    role:       data.role,
-    userId:     data.userId,
-    merchantId: data.merchantId,
-    name:       data.name
-  })
+  login({ token: data.token, role: data.role, userId: data.userId, merchantId: data.merchantId, name: data.name })
   setTimeout(() => uni.reLaunch({ url: '/pages/merchant/dashboard' }), 100)
 }
 
@@ -178,7 +213,6 @@ async function merchantLogin() {
       phone:    merchantPhone.value,
       password: merchantPassword.value
     }, { showLoad: false })
-
     if (data.needSelect) {
       merchantList.value = data.merchants
       showSelectSheet.value = true
@@ -187,8 +221,7 @@ async function merchantLogin() {
       doMerchantLogin(data)
     }
   } catch (e) {
-    const msg = e?.data?.message || '手机号或密码错误'
-    uni.showToast({ title: msg, icon: 'none' })
+    uni.showToast({ title: e?.data?.message || '手机号或密码错误', icon: 'none' })
   } finally {
     loading.value = false
   }
@@ -223,16 +256,10 @@ async function salesmanLogin() {
       password: salesmanPassword.value
     }, { showLoad: false })
     saveCredentials('salesman', salesmanPhone.value, salesmanPassword.value)
-    login({
-      token:    data.token,
-      role:     data.role,
-      userId:   data.userId,
-      name:     data.name
-    })
+    login({ token: data.token, role: data.role, userId: data.userId, name: data.name })
     setTimeout(() => uni.reLaunch({ url: '/pages/salesman/dashboard' }), 100)
   } catch (e) {
-    const msg = e?.data?.message || '手机号或密码错误'
-    uni.showToast({ title: msg, icon: 'none' })
+    uni.showToast({ title: e?.data?.message || '手机号或密码错误', icon: 'none' })
   } finally {
     loading.value = false
   }
@@ -249,33 +276,25 @@ async function salesmanLogin() {
   background: #0d1f3c;
 }
 
-/* 渐变背景层 */
 .bg-layer {
   position: absolute;
   inset: 0;
   background: linear-gradient(160deg, #0d1f3c 0%, #162d50 45%, #1a3a6e 100%);
 }
 
-/* 装饰圆形 */
 .deco-circle {
   position: absolute;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.04);
 }
-
 .deco-1 {
-  width: 600rpx;
-  height: 600rpx;
-  top: -200rpx;
-  right: -200rpx;
+  width: 600rpx; height: 600rpx;
+  top: -200rpx; right: -200rpx;
   border: 2rpx solid rgba(255, 255, 255, 0.06);
 }
-
 .deco-2 {
-  width: 400rpx;
-  height: 400rpx;
-  top: 100rpx;
-  left: -180rpx;
+  width: 400rpx; height: 400rpx;
+  top: 100rpx; left: -180rpx;
   background: rgba(45, 111, 214, 0.12);
 }
 
@@ -291,8 +310,7 @@ async function salesmanLogin() {
   padding-bottom: 40rpx;
 
   .brand-icon {
-    width: 160rpx;
-    height: 160rpx;
+    width: 160rpx; height: 160rpx;
     background: linear-gradient(135deg, rgba(255,255,255,0.15), rgba(255,255,255,0.06));
     border: 2rpx solid rgba(255,255,255,0.15);
     border-radius: 48rpx;
@@ -301,20 +319,24 @@ async function salesmanLogin() {
     justify-content: center;
     font-size: 80rpx;
     margin-bottom: 40rpx;
-    box-shadow: 0 20rpx 60rpx rgba(0, 0, 0, 0.3);
+    box-shadow: 0 20rpx 60rpx rgba(0,0,0,0.3);
+    overflow: hidden;
+
+    .brand-logo-img {
+      width: 100%;
+      height: 100%;
+    }
   }
 
   .brand-title {
-    font-size: 52rpx;
-    font-weight: 700;
-    color: #fff;
-    letter-spacing: 4rpx;
+    font-size: 52rpx; font-weight: 700;
+    color: #fff; letter-spacing: 4rpx;
     margin-bottom: 16rpx;
   }
 
   .brand-sub {
     font-size: 26rpx;
-    color: rgba(255, 255, 255, 0.5);
+    color: rgba(255,255,255,0.5);
     letter-spacing: 2rpx;
   }
 }
@@ -326,8 +348,11 @@ async function salesmanLogin() {
   background: #fff;
   border-radius: 48rpx 48rpx 0 0;
   padding: 48rpx 48rpx 60rpx;
-  box-shadow: 0 -8rpx 60rpx rgba(0, 0, 0, 0.3);
+  box-shadow: 0 -8rpx 60rpx rgba(0,0,0,0.3);
+}
 
+/* ── 步骤1：身份选择 ── */
+.step-select {
   .card-header {
     display: flex;
     align-items: center;
@@ -335,21 +360,12 @@ async function salesmanLogin() {
     gap: 20rpx;
     margin-bottom: 44rpx;
 
-    .card-hint {
-      font-size: 26rpx;
-      color: #aaa;
-    }
-
-    .card-dot {
-      width: 40rpx;
-      height: 2rpx;
-      background: #e0e0e0;
-      border-radius: 2rpx;
-    }
+    .card-hint { font-size: 26rpx; color: #aaa; }
+    .card-dot  { width: 40rpx; height: 2rpx; background: #e0e0e0; border-radius: 2rpx; }
   }
 }
 
-/* 登录按钮 */
+/* 身份按钮 */
 .btn {
   width: 100%;
   height: 100rpx;
@@ -359,32 +375,20 @@ async function salesmanLogin() {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 16rpx;
   margin-bottom: 24rpx;
   border: none;
   line-height: 100rpx;
-  position: relative;
 
-  &:active {
-    opacity: 0.88;
-    transform: scale(0.98);
-  }
+  &:active  { opacity: 0.88; transform: scale(0.98); }
+  &[disabled] { opacity: 0.6; }
 
-  &[disabled] {
-    opacity: 0.6;
-  }
-
-  .btn-text {
-    font-size: 30rpx;
-    font-weight: 600;
-  }
+  .btn-text { font-size: 30rpx; font-weight: 600; }
 }
 
-.btn-wechat {
+.btn-merchant {
   background: linear-gradient(135deg, #07c160, #06ad56);
   color: #fff;
-  box-shadow: 0 8rpx 32rpx rgba(7, 193, 96, 0.35);
-
+  box-shadow: 0 8rpx 32rpx rgba(7,193,96,0.35);
 }
 
 .btn-salesman {
@@ -393,22 +397,84 @@ async function salesmanLogin() {
   border: 1rpx solid #dce5f5;
 }
 
+/* ── 步骤2：登录表单 ── */
+.step-form {
+  .form-nav {
+    display: flex;
+    align-items: center;
+    margin-bottom: 40rpx;
+
+    .form-back {
+      display: flex;
+      align-items: center;
+      gap: 4rpx;
+      padding: 8rpx 0;
+
+      &:active { opacity: 0.6; }
+
+      .back-arrow { font-size: 44rpx; color: #1f4788; line-height: 1; font-weight: 300; }
+      .back-text  { font-size: 26rpx; color: #1f4788; }
+    }
+
+    .form-title {
+      flex: 1;
+      text-align: center;
+      font-size: 32rpx;
+      font-weight: 700;
+      color: #1a1a2e;
+    }
+
+    .form-nav-spacer { width: 80rpx; }
+  }
+
+  .sf-input {
+    width: 100%;
+    height: 88rpx;
+    background: #f4f6fa;
+    border-radius: 20rpx;
+    padding: 0 28rpx;
+    font-size: 28rpx;
+    color: #333;
+    box-sizing: border-box;
+    margin-bottom: 20rpx;
+    border: 1rpx solid #e8edf5;
+  }
+
+  .sf-btn {
+    width: 100%;
+    height: 96rpx;
+    border-radius: 24rpx;
+    color: #fff;
+    font-size: 30rpx;
+    font-weight: 600;
+    border: none;
+    line-height: 96rpx;
+    box-sizing: border-box;
+    padding: 0;
+    margin-top: 8rpx;
+    margin-bottom: 24rpx;
+
+    &[disabled] { opacity: 0.6; }
+  }
+
+  .sf-btn-merchant { background: linear-gradient(135deg, #07c160, #06ad56); box-shadow: 0 8rpx 32rpx rgba(7,193,96,0.3); }
+  .sf-btn-salesman { background: linear-gradient(135deg, #1a4a8a, #2d6fd6); box-shadow: 0 8rpx 32rpx rgba(45,111,214,0.3); }
+}
+
+/* 协议文字 */
 .agree-text {
   font-size: 22rpx;
   color: #bbb;
   text-align: center;
-  margin-top: 8rpx;
 
-  .link {
-    color: #1f4788;
-  }
+  .link { color: #1f4788; }
 }
 
 /* 多商家选择弹窗 */
 .sheet-mask {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0,0,0,0.5);
   z-index: 100;
   display: flex;
   align-items: flex-end;
@@ -421,10 +487,8 @@ async function salesmanLogin() {
   padding: 40rpx 40rpx 60rpx;
 
   .sheet-title {
-    font-size: 30rpx;
-    font-weight: 600;
-    color: #333;
-    text-align: center;
+    font-size: 30rpx; font-weight: 600;
+    color: #333; text-align: center;
     margin-bottom: 32rpx;
   }
 
@@ -434,21 +498,10 @@ async function salesmanLogin() {
     background: #f4f6fa;
     margin-bottom: 16rpx;
 
-    &:active {
-      background: #e8edf5;
-    }
+    &:active { background: #e8edf5; }
 
-    .sheet-item-name {
-      font-size: 30rpx;
-      font-weight: 600;
-      color: #1f4788;
-      margin-bottom: 8rpx;
-    }
-
-    .sheet-item-addr {
-      font-size: 24rpx;
-      color: #888;
-    }
+    .sheet-item-name { font-size: 30rpx; font-weight: 600; color: #1f4788; margin-bottom: 8rpx; }
+    .sheet-item-addr { font-size: 24rpx; color: #888; }
   }
 
   .sheet-cancel {
@@ -459,59 +512,4 @@ async function salesmanLogin() {
     padding: 12rpx;
   }
 }
-
-/* 业务员登录表单 */
-.salesman-form {
-  margin-top: 16rpx;
-  padding-top: 24rpx;
-  border-top: 1rpx solid #f0f0f0;
-
-  .sf-title {
-    font-size: 26rpx;
-    color: #1f4788;
-    font-weight: 600;
-    margin-bottom: 20rpx;
-    text-align: center;
-  }
-
-  .sf-input {
-    width: 100%;
-    height: 88rpx;
-    background: #f4f6fa;
-    border-radius: 20rpx;
-    padding: 0 28rpx;
-    font-size: 28rpx;
-    color: #333;
-    box-sizing: border-box;
-    margin-bottom: 16rpx;
-    border: 1rpx solid #e8edf5;
-  }
-
-  .sf-btn {
-    width: 100%;
-    height: 96rpx;
-    border-radius: 24rpx;
-    background: linear-gradient(135deg, #1a4a8a, #2d6fd6);
-    color: #fff;
-    font-size: 30rpx;
-    font-weight: 600;
-    border: none;
-    line-height: 96rpx;
-    box-sizing: border-box;
-    padding: 0;
-    margin-bottom: 16rpx;
-  }
-
-  .sf-btn-merchant {
-    background: linear-gradient(135deg, #07c160, #06ad56);
-  }
-
-  .sf-cancel {
-    text-align: center;
-    font-size: 26rpx;
-    color: #aaa;
-    padding: 8rpx;
-  }
-}
-
 </style>

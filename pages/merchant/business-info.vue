@@ -51,7 +51,7 @@
             class="img-preview"
             @click="previewImg(url)"
           >
-            <image :src="url" mode="aspectFill" class="img-thumb" />
+            <image :src="displayImageUrl(url)" mode="aspectFill" class="img-thumb" />
             <view class="img-del" @click.stop="removeImg('menu', i)">✕</view>
           </view>
           <view v-if="form.menuImages.length < 3" class="img-add" @click="chooseImg('menu')">
@@ -78,7 +78,7 @@
             class="img-preview"
             @click="previewImg(url)"
           >
-            <image :src="url" mode="aspectFill" class="img-thumb" />
+            <image :src="displayImageUrl(url)" mode="aspectFill" class="img-thumb" />
             <view class="img-del" @click.stop="removeImg('promotions', i)">✕</view>
           </view>
           <view v-if="form.promotionImages.length < 3" class="img-add" @click="chooseImg('promotions')">
@@ -129,6 +129,7 @@ import { get, put, BASE_URL } from '../../utils/request.js'
 
 const loading = ref(true)
 const saving  = ref(false)
+const imageCache = ref({})
 const form    = reactive({
   businessType: '', menu: '', promotions: '', businessHours: '', targetAudience: '',
   menuImages: [], promotionImages: []
@@ -184,6 +185,7 @@ async function load() {
       form.targetAudience   = data.targetAudience   || ''
       form.menuImages       = (data.menuImages      || []).map(normalizeUrl)
       form.promotionImages  = (data.promotionImages || []).map(normalizeUrl)
+      preloadImages([...form.menuImages, ...form.promotionImages])
     }
   } catch (_) {}
   loading.value = false
@@ -194,6 +196,38 @@ async function load() {
 function normalizeUrl(url) {
   if (!url) return url
   return url.startsWith('/') ? BASE_URL + url : url
+}
+
+function toRelUrl(url) {
+  if (!url) return url
+  return url.startsWith(BASE_URL) ? url.slice(BASE_URL.length) : url
+}
+
+function displayImageUrl(url) {
+  if (!url) return ''
+  return imageCache.value[url] || imageCache.value[normalizeUrl(url)] || normalizeUrl(url)
+}
+
+function cacheImageUrl(url) {
+  if (!url) return
+  const full = normalizeUrl(url)
+  if (!full.startsWith('http') || imageCache.value[url] || imageCache.value[full]) return
+  uni.downloadFile({
+    url: full,
+    success: (res) => {
+      if (res.statusCode === 200 && res.tempFilePath) {
+        imageCache.value = {
+          ...imageCache.value,
+          [url]: res.tempFilePath,
+          [full]: res.tempFilePath
+        }
+      }
+    }
+  })
+}
+
+function preloadImages(urls = []) {
+  urls.forEach(cacheImageUrl)
 }
 
 async function uploadImg(filePath) {
@@ -207,7 +241,7 @@ async function uploadImg(filePath) {
       success: res => {
         try {
           const body = JSON.parse(res.data)
-          if (body.code === 0) resolve(normalizeUrl(body.data.url))
+          if (body.code === 0) resolve(body.data.url)
           else reject(new Error(body.message))
         } catch (e) { reject(e) }
       },
@@ -229,6 +263,7 @@ function chooseImg(target) {
       uni.showLoading({ title: '上传中...', mask: true })
       try {
         const url = await uploadImg(tempFilePaths[0])
+        imageCache.value = { ...imageCache.value, [url]: tempFilePaths[0], [normalizeUrl(url)]: tempFilePaths[0] }
         if (target === 'menu') form.menuImages.push(url)
         else form.promotionImages.push(url)
       } catch (_) {
@@ -246,13 +281,18 @@ function removeImg(target, idx) {
 }
 
 function previewImg(url) {
-  uni.previewImage({ urls: [url] })
+  const src = displayImageUrl(url)
+  if (src) uni.previewImage({ urls: [src], current: src })
 }
 
 async function save() {
   saving.value = true
   try {
-    await put('/api/merchant/business-info', form)
+    await put('/api/merchant/business-info', {
+      ...form,
+      menuImages: form.menuImages.map(toRelUrl),
+      promotionImages: form.promotionImages.map(toRelUrl)
+    })
     uni.showToast({ title: '保存成功', icon: 'success' })
   } catch (_) {}
   saving.value = false

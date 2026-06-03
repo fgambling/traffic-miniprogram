@@ -99,17 +99,16 @@
           </view>
         </view>
 
-        <view v-if="loading" class="chart-placeholder">
+        <view v-if="loading && chartData.length === 0" class="chart-placeholder">
           <text class="placeholder-text">加载中…</text>
         </view>
         <view v-else-if="chartData.length === 0" class="chart-placeholder">
           <text class="placeholder-text">暂无数据</text>
         </view>
-        <!-- ②③⑤ 折线图，带峰值标注、对比线、横向滚动 -->
+        <!-- ②③⑤ 折线图，带峰值标注、对比线、横向滚动；切 tab 时保持挂载 -->
         <template v-else>
           <UniChart
-            :key="'trend-' + activeTab"
-            :canvas-id="'chart-trend-' + activeTab"
+            canvas-id="chart-trend"
             type="line"
             :data="chartData"
             :labels="chartLabels"
@@ -120,7 +119,7 @@
             :scrollable="activeTab === 1 || (activeTab === 2 && monthCount > 6)"
             :scroll-threshold="activeTab === 2 ? 6 : 14"
             :point-w="44"
-            :height="320"
+            :height="360"
             @line-touch="onLineTouch"
             @line-release="onLineRelease"
           />
@@ -462,7 +461,9 @@ const monthCount = computed(() => {
 // ── 数据加载 ─────────────────────────────────────────────────
 async function loadTrend() {
   loading.value = true
-  trendPoints.value = []
+  // 注意：这里不清空 trendPoints，让旧数据保持显示直到新数据到达，
+  // 使 <UniChart> 在切 tab 时保持挂载（不重建原生 canvas），避免原生缓冲区
+  // 重建导致横坐标/最右点被裁、触摸区错位。
   comparePoints.value = []
   clearSelection()
 
@@ -1082,8 +1083,6 @@ async function doExport() {
 }
 
 async function loadStayAnalysis(idx) {
-  // 月 Tab 不显示停留分析，跳过请求
-  if (activeTab.value === 2) { stayData.value = null; return }
   const params = buildStayParams(idx)
   if (!params) { stayData.value = null; return }
   stayLoading.value = true

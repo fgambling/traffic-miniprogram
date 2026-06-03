@@ -1,5 +1,9 @@
 <template>
-  <view v-if="show" class="overlay" @click.self="$emit('close')">
+  <view
+    v-if="show"
+    class="overlay"
+  >
+    <view class="backdrop" @click="$emit('close')" @touchmove.stop.prevent="noop" />
     <view class="sheet" @click.stop>
       <view class="sheet-handle" />
       <view class="sheet-header" v-if="title">
@@ -21,6 +25,7 @@ defineProps({
   title: { type: String, default: '' }
 })
 defineEmits(['close'])
+const noop = () => {}
 </script>
 
 <style lang="scss" scoped>
@@ -36,10 +41,20 @@ defineEmits(['close'])
   align-items: flex-end;
   justify-content: center;
 
+  .backdrop {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+  }
+
   .sheet {
+    position: relative;
     background: #fff;
     border-radius: 48rpx 48rpx 0 0;
     width: 100%;
+    height: 76vh;
     max-height: 76vh;
     display: flex;
     flex-direction: column;
@@ -84,6 +99,8 @@ defineEmits(['close'])
 
     .sheet-body {
       flex: 1;
+      height: 0;
+      min-height: 0;          /* flex 子元素必须设置，否则高度被内容撑满后无法滚动 */
       width: 100%;
       box-sizing: border-box;
       overflow-y: auto;

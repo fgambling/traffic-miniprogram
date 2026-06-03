@@ -387,10 +387,10 @@ const peakMessage = computed(() => {
 
 // ── 工具函数 ─────────────────────────────────────────────────
 function formatStay(seconds) {
-  if (!seconds) return '0min'
+  if (!seconds) return '0分钟'
   const m = Math.floor(seconds / 60)
   const s = seconds % 60
-  return s > 0 ? `${m}m${s}s` : `${m}min`
+  return s > 0 ? `${m}分${s}秒` : `${m}分钟`
 }
 
 function computeAgeData(raw) {
@@ -761,7 +761,7 @@ function onAgeClick(i) {
     padding: 8rpx 0 16rpx;
 
     .hero-label {
-      font-size: 33rpx;
+      font-size: 23rpx;
       opacity: 0.6;
       letter-spacing: 2rpx;
     }
@@ -788,7 +788,7 @@ function onAgeClick(i) {
       gap: 8rpx;
       padding: 6rpx 24rpx;
       border-radius: 40rpx;
-      font-size: 33rpx;
+      font-size: 23rpx;
 
       &.delta-up   { background: rgba(23, 121, 74, 0.35); }
       &.delta-down { background: rgba(200, 50, 50, 0.35); }
@@ -807,9 +807,9 @@ function onAgeClick(i) {
       text-align: center;
 
       .sm-val {
-        font-size: 44rpx;
+        font-size: 40rpx;
         font-weight: 700;
-        .sm-unit { font-size: 26rpx; font-weight: 500; }
+        .sm-unit { font-size: 24rpx; font-weight: 500; }
       }
 
       .sm-label {

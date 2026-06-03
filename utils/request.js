@@ -1,9 +1,58 @@
-import { getToken, logout } from './auth.js'
+import { getToken, setToken, setRole, setUserInfo, getRole, logout } from './auth.js'
 
-export const BASE_URL = 'http://192.168.0.108:8080'
+export const BASE_URL = 'http://192.168.0.120:8080'
 //export const BASE_URL = 'http://localhost:8080'
 
 let loadingCount = 0
+let isReLogging = false
+
+// token 过期时用已保存的凭据静默重新登录，成功返回 true
+function trySilentReLogin() {
+  if (isReLogging) return Promise.resolve(false)
+  isReLogging = true
+
+  const role = getRole()
+  let url, body
+  if (role === 'merchant') {
+    const phone    = uni.getStorageSync('login_merchant_phone')
+    const password = uni.getStorageSync('login_merchant_pwd')
+    if (!phone || !password) { isReLogging = false; return Promise.resolve(false) }
+    url  = '/api/auth/merchant-login'
+    body = { phone, password }
+  } else if (role === 'salesman') {
+    const phone    = uni.getStorageSync('login_salesman_phone')
+    const password = uni.getStorageSync('login_salesman_pwd')
+    if (!phone || !password) { isReLogging = false; return Promise.resolve(false) }
+    url  = '/api/auth/salesman-login'
+    body = { phone, password }
+  } else {
+    isReLogging = false
+    return Promise.resolve(false)
+  }
+
+  return new Promise(resolve => {
+    uni.request({
+      url: BASE_URL + url,
+      method: 'POST',
+      data: body,
+      header: { 'Content-Type': 'application/json' },
+      success(res) {
+        isReLogging = false
+        if (res.statusCode === 200 && res.data?.code === 0) {
+          const data = res.data.data
+          if (data.needSelect) { resolve(false); return }
+          setToken(data.token)
+          if (data.role) setRole(data.role)
+          setUserInfo({ userId: data.userId, merchantId: data.merchantId, name: data.name })
+          resolve(true)
+        } else {
+          resolve(false)
+        }
+      },
+      fail() { isReLogging = false; resolve(false) }
+    })
+  })
+}
 
 function showLoading() {
   loadingCount++
@@ -26,7 +75,8 @@ export function request(options = {}) {
     data = {},
     showLoad = true,
     header = {},
-    timeout = 30000
+    timeout = 30000,
+    _retried = false
   } = options
 
   if (showLoad) showLoading()
@@ -51,8 +101,19 @@ export function request(options = {}) {
         if (showLoad) hideLoading()
 
         if (res.statusCode === 401) {
-          logout()
-          reject(new Error('登录已过期，请重新登录'))
+          if (!_retried) {
+            trySilentReLogin().then(ok => {
+              if (ok) {
+                request({ ...options, _retried: true }).then(resolve).catch(reject)
+              } else {
+                logout()
+                reject(new Error('登录已过期，请重新登录'))
+              }
+            })
+          } else {
+            logout()
+            reject(new Error('登录已过期，请重新登录'))
+          }
           return
         }
 
