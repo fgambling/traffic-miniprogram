@@ -8,9 +8,6 @@
       </view>
       <view class="salesman-row">
         <text class="salesman-name">{{ stats.name || userInfo?.nickname || '业务员' }}</text>
-        <view class="export-btn" @click="exportExcel">
-          <text class="export-text">导出报表</text>
-        </view>
       </view>
     </view>
 
@@ -158,8 +155,7 @@ import TabBar from '../../components/TabBar.vue'
 import UniChart from '../../components/UniChart.vue'
 import { useUserStore } from '../../store/user.js'
 import { statusBarHeight } from '../../utils/system.js'
-import { get, BASE_URL } from '../../utils/request.js'
-import { getToken } from '../../utils/auth.js'
+import { get } from '../../utils/request.js'
 
 const { state } = useUserStore()
 const userInfo = state.userInfo
@@ -271,43 +267,6 @@ async function onRefresh() {
   uni.showToast({ title: '已刷新', icon: 'none' })
 }
 
-function exportExcel() {
-  uni.showLoading({ title: '生成中...' })
-  const token = getToken()
-
-  uni.request({
-    url: `${BASE_URL}/api/salesman/performance/export`,
-    method: 'GET',
-    header: { Authorization: `Bearer ${token}` },
-    success: (res) => {
-      uni.hideLoading()
-      const fileUrl = res.data?.data?.url
-      if (!fileUrl) { uni.showToast({ title: '导出失败', icon: 'none' }); return }
-      // 下载并打开
-      uni.downloadFile({
-        url: `${BASE_URL}${fileUrl}`,
-        header: { Authorization: `Bearer ${token}` },
-        success: ({ tempFilePath }) => {
-          uni.openDocument({
-            filePath: tempFilePath,
-            fileType: 'xlsx',
-            showMenu: true,
-            fail: () => {
-              uni.showModal({
-                title: '文件已生成',
-                content: '无法自动打开，请在浏览器访问：' + BASE_URL + fileUrl,
-                showCancel: false
-              })
-            }
-          })
-        },
-        fail: () => uni.showToast({ title: '下载失败', icon: 'none' })
-      })
-    },
-    fail: () => { uni.hideLoading(); uni.showToast({ title: '请求失败', icon: 'none' }) }
-  })
-}
-
 // ── 工具 ─────────────────────────────────────────────────────
 function fmtAmt(val) {
   const n = Number(val) || 0
@@ -361,16 +320,6 @@ function goCommission() { uni.redirectTo({ url: '/pages/salesman/commission' }) 
   .salesman-name {
     font-size: 24rpx;
     opacity: 0.65;
-  }
-
-  .export-btn {
-    background: rgba(255, 255, 255, 0.18);
-    border-radius: 20rpx;
-    padding: 8rpx 24rpx;
-
-    &:active { opacity: 0.7; }
-
-    .export-text { font-size: 24rpx; font-weight: 600; color: #fff; }
   }
 }
 

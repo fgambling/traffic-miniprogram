@@ -1,7 +1,16 @@
 import { getToken, setToken, setRole, setUserInfo, getRole, logout } from './auth.js'
 
-export const BASE_URL = 'http://192.168.0.120:8080'
-//export const BASE_URL = 'http://localhost:8080'
+// 按环境自动切换后端地址：
+// - 开发（运行/真机调试）走内网；真机调试时把下方 IP 改成"当前电脑"的局域网 IP
+// - 正式（npm run build / 发布版）走线上 https 域名
+// 正式发布前需：①服务器配好域名+SSL ②把 PROD_BASE_URL 改成你的域名
+//             ③在微信公众平台「服务器域名 - request 合法域名」里登记该域名
+const DEV_BASE_URL  = 'http://192.168.0.108:8080'
+const PROD_BASE_URL = 'https://api.你的域名.com'
+
+export const BASE_URL = process.env.NODE_ENV === 'development'
+  ? DEV_BASE_URL
+  : PROD_BASE_URL
 
 let loadingCount = 0
 let isReLogging = false

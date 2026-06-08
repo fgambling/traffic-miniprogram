@@ -2,9 +2,10 @@
   <view
     v-if="show"
     class="overlay"
+    @touchmove.stop.prevent="noop"
   >
     <view class="backdrop" @click="$emit('close')" @touchmove.stop.prevent="noop" />
-    <view class="sheet" @click.stop>
+    <view class="sheet" :style="sheetStyle" @click.stop @touchmove.stop>
       <view class="sheet-handle" />
       <view class="sheet-header" v-if="title">
         <text class="sheet-title">{{ title }}</text>
@@ -20,12 +21,19 @@
 </template>
 
 <script setup>
-defineProps({
+import { computed } from 'vue'
+
+const props = defineProps({
   show: { type: Boolean, default: false },
-  title: { type: String, default: '' }
+  title: { type: String, default: '' },
+  height: { type: String, default: '76vh' }
 })
 defineEmits(['close'])
 const noop = () => {}
+const sheetStyle = computed(() => ({
+  height: props.height,
+  maxHeight: props.height
+}))
 </script>
 
 <style lang="scss" scoped>
@@ -54,8 +62,6 @@ const noop = () => {}
     background: #fff;
     border-radius: 48rpx 48rpx 0 0;
     width: 100%;
-    height: 76vh;
-    max-height: 76vh;
     display: flex;
     flex-direction: column;
     animation: slideUp 0.3s cubic-bezier(0.34, 1.12, 0.64, 1);

@@ -29,7 +29,7 @@
           <view class="sm-label">进店率</view>
         </view>
         <view class="sub-metric">
-          <view class="sm-val">{{ stat.avgStay }}</view>
+          <view class="sm-val"><text v-for="(ch, i) in avgStayChars" :key="i" :class="{ 'sm-unit': ch.unit }">{{ ch.c }}</text></view>
           <view class="sm-label">平均停留</view>
         </view>
       </view>
@@ -38,9 +38,9 @@
     <!-- ===== 滚动内容 ===== -->
     <scroll-view
       class="scroll-area"
-      scroll-y
+      :scroll-y="!anySheetOpen"
       enable-flex
-      refresher-enabled
+      :refresher-enabled="!anySheetOpen"
       :refresher-triggered="isRefreshing"
       @refresherrefresh="onPullRefresh"
       @refresherrestore="isRefreshing = false"
@@ -284,14 +284,14 @@
     </BottomSheet>
 
     <!-- 分钟曲线弹层 -->
-    <BottomSheet :show="showMinuteSheet" :title="minuteSheetTitle" @close="showMinuteSheet = false">
-      <view style="padding: 0 0 24rpx;">
-        <view v-if="minuteData.length > 0" class="minute-axis-label">
+    <BottomSheet :show="showMinuteSheet" :title="minuteSheetTitle" height="54vh" @close="closeMinuteSheet">
+      <view class="minute-sheet-content">
+        <view v-if="minuteChartReady && minuteData.length > 0" class="minute-axis-label">
           <text class="y-axis-cap">↑ 进店人数（人）</text>
           <text class="x-axis-cap">时刻（时:分）→</text>
         </view>
         <UniChart
-          v-if="showMinuteSheet"
+          v-if="minuteChartReady && minuteData.length > 0"
           canvas-id="chart-minute"
           type="line"
           :data="minuteData"
@@ -300,14 +300,14 @@
           :show-y-axis="true"
           :y-unit="'人'"
         />
-        <view v-if="minuteData.length === 0" class="empty-tip">该时段暂无分钟级数据</view>
+        <view v-if="minuteChartReady && minuteData.length === 0" class="empty-tip">该时段暂无分钟级数据</view>
       </view>
     </BottomSheet>
   </view>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import TabBar from '../../components/TabBar.vue'
 import BottomSheet from '../../components/BottomSheet.vue'
 import UniChart from '../../components/UniChart.vue'
@@ -332,6 +332,11 @@ const stat = ref({
 const showGenderCount = ref(false)
 const activeAgeIdx    = ref(-1)
 
+// 平均停留拆成「数字 + 单位」字符，使单位（分/秒/钟）字号与"当前在店"的"人"一致
+const avgStayChars = computed(() =>
+  String(stat.value.avgStay).split('').map(c => ({ c, unit: !/\d/.test(c) }))
+)
+
 const hourlyData   = ref([])
 const hourlyLabels = ref([])
 const hourlyPeak   = ref(10)
@@ -352,6 +357,7 @@ const stores        = ref([])
 
 const showStoreSheet  = ref(false)
 const showMinuteSheet = ref(false)
+const minuteChartReady = ref(false)
 const minuteSheetTitle = ref('')
 const minuteData      = ref([])
 const minuteLabels    = ref([])
@@ -589,6 +595,11 @@ const profileAccessoryData = computed(() => {
 })
 
 // ── 分钟曲线 ─────────────────────────────────────────────────
+function closeMinuteSheet() {
+  showMinuteSheet.value = false
+  minuteChartReady.value = false
+}
+
 async function onPeakBannerClick() {
   const info = peakHourInfo.value
   if (!info) return
@@ -600,11 +611,12 @@ async function onPeakBannerClick() {
   const dateStr = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`
 
   minuteSheetTitle.value = `${info.label}:00 - ${info.label}:59 分钟客流`
+  minuteChartReady.value = false
   minuteData.value   = []
   minuteLabels.value = []
   showMinuteSheet.value = true
 
-  // 等待BottomSheet动画完成(300ms)后再赋数据，避免canvas挂载时动画未完成导致超时
+  // 等待 BottomSheet 动画完成后再挂载 canvas，避免真机上 canvas 初始定位跟随背景滚动错位。
   await new Promise(resolve => setTimeout(resolve, 420))
   if (!showMinuteSheet.value) return  // 用户已关闭
 
@@ -623,6 +635,11 @@ async function onPeakBannerClick() {
     }
   } catch (e) {
     // 保持空
+  } finally {
+    if (showMinuteSheet.value) {
+      await nextTick()
+      minuteChartReady.value = true
+    }
   }
 }
 
@@ -850,8 +867,8 @@ function onAgeClick(i) {
 
   &:active { opacity: 0.8; }
 
-  .peak-icon { font-size: 42rpx; flex-shrink: 0; }
-  .peak-arrow { font-size: 42rpx; color: #e6a817; flex-shrink: 0; }
+  .peak-icon { font-size: 34rpx; flex-shrink: 0; }
+  .peak-arrow { font-size: 34rpx; color: #e6a817; flex-shrink: 0; }
 }
 
 .marquee-wrap {
@@ -861,7 +878,7 @@ function onAgeClick(i) {
 
   .marquee-text {
     display: inline-block;
-    font-size: 36rpx;
+    font-size: 29rpx;
     color: #7a5c00;
     animation: marquee-scroll 16s linear infinite;
     padding-left: 100%;
@@ -890,13 +907,13 @@ function onAgeClick(i) {
   }
 
   .mini-title {
-    font-size: 36rpx;
+    font-size: 29rpx;
     font-weight: 600;
     color: #333;
   }
 
   .mini-detail {
-    font-size: 33rpx;
+    font-size: 26rpx;
     color: #1f4788;
     &:active { opacity: 0.6; }
   }
@@ -930,7 +947,7 @@ function onAgeClick(i) {
     justify-content: center;
 
     .gender-hole-label {
-      font-size: 27rpx;
+      font-size: 22rpx;
       color: #666;
       font-weight: 600;
     }
@@ -957,7 +974,7 @@ function onAgeClick(i) {
     }
 
     .dl-label {
-      font-size: 30rpx;
+      font-size: 24rpx;
       color: #666;
     }
   }
@@ -976,9 +993,9 @@ function onAgeClick(i) {
       align-items: center;
       gap: 4rpx;
 
-      .age-pct  { font-size: 30rpx; font-weight: 600; }
+      .age-pct  { font-size: 24rpx; font-weight: 600; }
       .age-fill { width: 100%; border-radius: 6rpx 6rpx 0 0; }
-      .age-label { font-size: 27rpx; color: #bbb; }
+      .age-label { font-size: 22rpx; color: #bbb; }
     }
   }
 }
@@ -1029,7 +1046,7 @@ function onAgeClick(i) {
   }
 
   .tip-text {
-    font-size: 33rpx;
+    font-size: 26rpx;
     color: #fff;
     font-weight: 600;
   }
@@ -1095,7 +1112,7 @@ function onAgeClick(i) {
 /* ===== 数据来源 ===== */
 .data-source {
   text-align: center;
-  font-size: 30rpx;
+  font-size: 24rpx;
   color: #c0c0c0;
   padding: 24rpx 0 8rpx;
 }
@@ -1125,6 +1142,10 @@ function onAgeClick(i) {
 }
 
 /* ===== 分钟曲线轴标签 ===== */
+.minute-sheet-content {
+  padding: 0 0 8rpx;
+}
+
 .minute-axis-label {
   display: flex;
   justify-content: space-between;
@@ -1151,7 +1172,7 @@ function onAgeClick(i) {
 .profile-empty {
   text-align: center;
   padding: 40rpx 0;
-  font-size: 26rpx;
+  font-size: 21rpx;
   color: #ccc;
 }
 
@@ -1166,13 +1187,13 @@ function onAgeClick(i) {
 
       &:not(:last-child) { border-right: 1rpx solid #f0f0f0; }
 
-      .ps-val   { font-size: 40rpx; font-weight: 700; color: #1a1a2e; }
-      .ps-label { font-size: 22rpx; color: #999; margin-top: 4rpx; }
+      .ps-val   { font-size: 32rpx; font-weight: 700; color: #1a1a2e; }
+      .ps-label { font-size: 18rpx; color: #999; margin-top: 4rpx; }
     }
   }
 
   .ps-section-label {
-    font-size: 26rpx;
+    font-size: 21rpx;
     color: #888;
     margin-bottom: 16rpx;
     margin-top: 24rpx;
@@ -1197,7 +1218,7 @@ function onAgeClick(i) {
   .gender-legend {
     display: flex;
     justify-content: space-between;
-    font-size: 24rpx;
+    font-size: 19rpx;
 
     .gl-male   { color: #2d6fd6; }
     .gl-female { color: #d64a7a; }
@@ -1217,9 +1238,9 @@ function onAgeClick(i) {
       align-items: center;
       gap: 4rpx;
 
-      .ac-pct   { font-size: 24rpx; font-weight: 600; }
+      .ac-pct   { font-size: 19rpx; font-weight: 600; }
       .ac-bar   { width: 100%; border-radius: 6rpx 6rpx 0 0; }
-      .ac-label { font-size: 20rpx; color: #bbb; }
+      .ac-label { font-size: 16rpx; color: #bbb; }
     }
   }
 
@@ -1234,7 +1255,7 @@ function onAgeClick(i) {
 
       .ar-label {
         width: 130rpx;
-        font-size: 24rpx;
+        font-size: 19rpx;
         color: #666;
         flex-shrink: 0;
       }
@@ -1251,7 +1272,7 @@ function onAgeClick(i) {
 
       .ar-pct {
         width: 70rpx;
-        font-size: 24rpx;
+        font-size: 19rpx;
         color: #999;
         text-align: right;
         flex-shrink: 0;

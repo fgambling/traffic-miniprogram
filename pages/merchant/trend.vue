@@ -338,32 +338,6 @@
       <view class="tab-spacer" />
     </scroll-view>
 
-    <!-- 导出 BottomSheet -->
-    <view v-if="showExportSheet" class="sheet-mask" @click="showExportSheet = false">
-      <view class="export-sheet" @click.stop>
-        <view class="es-title">导出数据</view>
-
-        <view class="es-label">导出内容</view>
-        <view class="es-opts">
-          <view class="es-opt" :class="{ selected: exportScope === 'trend' }" @click="exportScope = 'trend'">客流折线图</view>
-          <template v-if="selectedIdx !== null">
-            <view class="es-opt" :class="{ selected: exportScope === 'profile' }" @click="exportScope = 'profile'">客群画像</view>
-            <view class="es-opt" :class="{ selected: exportScope === 'both' }" @click="exportScope = 'both'">全部</view>
-          </template>
-        </view>
-
-        <view class="es-label">文件格式</view>
-        <view class="es-opts">
-          <view class="es-opt" :class="{ selected: exportFormat === 'excel' }" @click="exportFormat = 'excel'">Excel</view>
-          <view class="es-opt" :class="{ selected: exportFormat === 'pdf' }" @click="exportFormat = 'pdf'">PDF</view>
-        </view>
-
-        <button class="es-btn" :disabled="exporting" @click="doExport">
-          {{ exporting ? '正在导出…' : '确认导出' }}
-        </button>
-      </view>
-    </view>
-
     <TabBar role="merchant" :current="1" />
   </view>
 </template>
@@ -379,6 +353,10 @@ import { getToken } from '../../utils/auth.js'
 // ── 日期工具 ─────────────────────────────────────────────────
 function toISO(d) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+}
+function parseLocalDate(value) {
+  const m = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(value)
 }
 function nDaysAgo(n) {
   const d = new Date(); d.setDate(d.getDate() - n); return toISO(d)
@@ -433,9 +411,6 @@ const profileInsight  = ref(null)
 
 // 导出
 const navBarStyle     = ref({})
-const showExportSheet = ref(false)
-const exportFormat    = ref('excel')
-const exportScope     = ref('trend')
 const exporting       = ref(false)
 
 // 停留时长分析状态
@@ -446,7 +421,7 @@ const stayActiveBar = ref(-1)
 // ── 日期范围计算 ──────────────────────────────────────────────
 const dayCount = computed(() => {
   if (!dateStart.value || !dateEnd.value) return 0
-  const ms = new Date(dateEnd.value) - new Date(dateStart.value)
+  const ms = parseLocalDate(dateEnd.value) - parseLocalDate(dateStart.value)
   return Math.round(ms / 86400000) + 1
 })
 
@@ -530,8 +505,8 @@ function onHourDateChange(e) {
 
 function onDayStartChange(e) {
   const newStart = e.detail.value
-  const d1 = new Date(newStart)
-  const d2 = new Date(dateEnd.value)
+  const d1 = parseLocalDate(newStart)
+  const d2 = parseLocalDate(dateEnd.value)
   if ((d2 - d1) / 86400000 >= maxDays.value) {
     uni.showToast({ title: `最多可选 ${maxDays.value} 天`, icon: 'none', duration: 2000 })
     return
@@ -542,8 +517,8 @@ function onDayStartChange(e) {
 
 function onDayEndChange(e) {
   const newEnd = e.detail.value
-  const d1 = new Date(dateStart.value)
-  const d2 = new Date(newEnd)
+  const d1 = parseLocalDate(dateStart.value)
+  const d2 = parseLocalDate(newEnd)
   if ((d2 - d1) / 86400000 >= maxDays.value) {
     uni.showToast({ title: `最多可选 ${maxDays.value} 天`, icon: 'none', duration: 2000 })
     return
@@ -580,7 +555,7 @@ function onMonthEndChange(e) {
 function onCompareDateChange(e) {
   const picked = e.detail.value
   const today     = new Date(); today.setHours(0, 0, 0, 0)
-  const pickedDay = new Date(picked)
+  const pickedDay = parseLocalDate(picked)
   const diffDays  = Math.round((today - pickedDay) / 86400000)
 
   if (diffDays <= 0) {
@@ -610,8 +585,8 @@ async function fetchCompare() {
   } else if (type === 'day') {
     // 上一个同等长度区间
     const n = dayCount.value
-    const d1 = new Date(dateStart.value); d1.setDate(d1.getDate() - n)
-    const d2 = new Date(dateEnd.value);   d2.setDate(d2.getDate() - n)
+    const d1 = parseLocalDate(dateStart.value); d1.setDate(d1.getDate() - n)
+    const d2 = parseLocalDate(dateEnd.value);   d2.setDate(d2.getDate() - n)
     params = { type: 'day', start: toISO(d1), end: toISO(d2) }
   }
 
@@ -713,21 +688,28 @@ const chartTitle = computed(() => {
 // ── 摘要 ─────────────────────────────────────────────────────
 const summary = computed(() => {
   const pts = trendPoints.value
-  if (!pts.length) return { total: 0, avg: 0, peak: '--' }
+  if (!pts.length) return { total: 0, avg: 0, peak: '--', peakUnit: '' }
   const total = pts.reduce((s, p) => s + p.enterCount, 0)
   const avg   = Math.round(total / pts.length)
   const maxPt = pts.reduce((a, b) => b.enterCount > a.enterCount ? b : a, pts[0])
   let peak
+  let peakUnit = ''
   if (tabs[activeTab.value].type === 'hour') {
     const h = parseInt(maxPt.timeLabel?.split(' ')[1] ?? '0')
-    peak = `${h}-${h + 1}点`
+    peak = `${h}-${h + 1}`
+    peakUnit = '点'
   } else if (tabs[activeTab.value].type === 'day') {
     const m = maxPt.timeLabel?.match(/\d{4}-(\d{2})-(\d{2})/)
-    peak = m ? `${parseInt(m[1])}/${parseInt(m[2])}日` : formatLabel(maxPt.timeLabel)
+    peak = m ? `${parseInt(m[1])}/${parseInt(m[2])}` : formatLabel(maxPt.timeLabel)
+    peakUnit = m ? '日' : ''
+  } else if (tabs[activeTab.value].type === 'month') {
+    const m = maxPt.timeLabel?.match(/\d{4}-(\d{2})/)
+    peak = m ? m[1] : formatLabel(maxPt.timeLabel)
+    peakUnit = m ? '月' : ''
   } else {
     peak = formatLabel(maxPt.timeLabel)
   }
-  return { total, avg, peak }
+  return { total, avg, peak, peakUnit }
 })
 
 const avgLabel = computed(() => {
@@ -740,7 +722,7 @@ const peakLabel = computed(() => {
   return map[tabs[activeTab.value].type] || '峰值'
 })
 
-const peakUnit = computed(() => '')
+const peakUnit = computed(() => summary.value.peakUnit || '')
 
 // ── 折线点击 → 并行加载画像 + 停留分析 ──────────────────────
 function onLineTouch(idx) {
@@ -785,7 +767,7 @@ function buildProfileParams(idx) {
     case 'day':
       return { start: label, end: label }
     case 'week': {
-      const d   = new Date(label)
+      const d   = parseLocalDate(label)
       const sun = new Date(d.getTime() + 6 * 86400000)
       return { start: label, end: toISO(sun) }
     }
@@ -1017,7 +999,7 @@ function buildStayParams(idx) {
       // 单日：hour 粒度，趋势为当天 24 小时分布
       return { type: 'hour', start: label, end: label }
     case 'week': {
-      const d   = new Date(label)
+      const d   = parseLocalDate(label)
       const sun = new Date(d.getTime() + 6 * 86400000)
       return { type: 'day', start: label, end: toISO(sun) }
     }
@@ -1035,26 +1017,44 @@ function onExportClick() {
     uni.showToast({ title: '该功能仅限中级以上用户', icon: 'none', duration: 2500 })
     return
   }
-  exportScope.value  = selectedIdx.value !== null ? 'both' : 'trend'
-  exportFormat.value = 'excel'
-  showExportSheet.value = true
+  uni.showModal({
+    title: '导出报表',
+    content: '确认导出当前筛选时段的全部客流数据和对应客群画像吗？',
+    confirmText: '确认导出',
+    cancelText: '取消',
+    success: (res) => {
+      if (res.confirm) doExport()
+    }
+  })
 }
 
 async function doExport() {
   exporting.value = true
   try {
     const type = tabs[activeTab.value].type
-    const p = { format: exportFormat.value, scope: exportScope.value, type }
+    const p = { format: 'pdf', type }
 
-    if (type === 'hour')      { p.start = selectedDate.value; p.end = selectedDate.value }
-    else if (type === 'day')  { p.start = dateStart.value;    p.end = dateEnd.value }
+    // 趋势时间范围
+    if (type === 'hour')       { p.start = selectedDate.value; p.end = selectedDate.value }
+    else if (type === 'day')   { p.start = dateStart.value;    p.end = dateEnd.value }
+    else if (type === 'month') {
+      p.start = monthStart.value + '-01'
+      p.end   = lastDayOfMonth(monthEnd.value)
+    }
 
-    if (exportScope.value !== 'trend' && selectedIdx.value !== null) {
-      const pp = buildProfileParams(selectedIdx.value)
-      if (pp) {
-        if (pp.startDt) { p.profileStartDt = pp.startDt; p.profileEndDt = pp.endDt }
-        if (pp.start)   { p.profileStart   = pp.start;   p.profileEnd   = pp.end }
-      }
+    const profileParams = selectedIdx.value !== null ? buildProfileParams(selectedIdx.value) : null
+    if (profileParams?.startDt && profileParams?.endDt) {
+      p.profileStartDt = profileParams.startDt
+      p.profileEndDt = profileParams.endDt
+    } else if (profileParams?.start && profileParams?.end) {
+      p.profileStart = profileParams.start
+      p.profileEnd = profileParams.end
+    } else if (type === 'hour') {
+      p.profileStart = selectedDate.value
+      p.profileEnd = selectedDate.value
+    } else {
+      p.profileStart = p.start
+      p.profileEnd = p.end
     }
 
     const qs    = Object.entries(p).filter(([, v]) => v != null).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&')
@@ -1071,7 +1071,6 @@ async function doExport() {
 
     if (res.statusCode === 200) {
       uni.openDocument({ filePath: res.tempFilePath, showMenu: true })
-      showExportSheet.value = false
     } else {
       uni.showToast({ title: '导出失败', icon: 'none' })
     }
@@ -1134,81 +1133,6 @@ async function loadStayAnalysis(idx) {
     color: #fff;
 
     &:active { opacity: 0.7; }
-  }
-}
-
-/* ── 导出 BottomSheet ── */
-.sheet-mask {
-  position: fixed;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0, 0, 0, 0.45);
-  z-index: 200;
-  display: flex;
-  align-items: flex-end;
-}
-
-.export-sheet {
-  width: 100%;
-  background: #fff;
-  border-radius: 28rpx 28rpx 0 0;
-  padding: 40rpx 40rpx calc(40rpx + env(safe-area-inset-bottom));
-
-  .es-title {
-    font-size: 32rpx;
-    font-weight: 700;
-    color: #1a1a2e;
-    text-align: center;
-    margin-bottom: 36rpx;
-  }
-
-  .es-label {
-    font-size: 24rpx;
-    color: #999;
-    margin-bottom: 16rpx;
-    margin-top: 28rpx;
-  }
-
-  .es-opts {
-    display: flex;
-    gap: 16rpx;
-  }
-
-  .es-opt {
-    flex: 1;
-    height: 72rpx;
-    line-height: 72rpx;
-    text-align: center;
-    border: 2rpx solid #e0e6f0;
-    border-radius: 16rpx;
-    font-size: 26rpx;
-    color: #666;
-    background: #f8f9fc;
-
-    &.selected {
-      border-color: #1f4788;
-      color: #1f4788;
-      background: rgba(31, 71, 136, 0.07);
-      font-weight: 600;
-    }
-
-    &:active { opacity: 0.75; }
-  }
-
-  .es-btn {
-    display: block;
-    margin-top: 40rpx;
-    width: 100%;
-    height: 88rpx;
-    line-height: 88rpx;
-    background: linear-gradient(90deg, #1f4788, #2d6fd6);
-    color: #fff;
-    border-radius: 44rpx;
-    font-size: 30rpx;
-    font-weight: 600;
-    border: none;
-    text-align: center;
-
-    &[disabled] { opacity: 0.5; }
   }
 }
 

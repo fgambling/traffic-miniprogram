@@ -255,6 +255,15 @@
             @click="sendFeedback(currentAdvice, 2)"
           >{{ currentAdvice.feedback === 2 ? '✅ 无用' : '👎 无用' }}</button>
         </view>
+        <view class="fb-note-row">
+          <textarea
+            class="fb-note-input"
+            v-model="feedbackNote"
+            placeholder="您的反馈，有利于开财AI为您不断提供更精准建议"
+            maxlength="200"
+          />
+          <button class="fb-note-save" @click="saveFeedbackNote">保存备注</button>
+        </view>
       </view>
     </BottomSheet>
 
@@ -387,6 +396,7 @@ const genMode         = ref('')       // '' | 'today' | 'lastHour'，默认不�
 const dailyRemain     = ref(null)     // null=无限制, 数字=剩余次数
 const rangeAvail      = ref({ today: null, lastHour: null })  // null=加载中
 const currentAdvice   = ref(null)
+const feedbackNote    = ref('')
 const loading     = ref(true)
 const advices     = ref([])
 const page        = ref(1)
@@ -548,6 +558,7 @@ function switchSourceTab(idx) {
 
 function openDetail(advice) {
   currentAdvice.value  = advice
+  feedbackNote.value   = advice.feedbackNote || ''
   showDetailSheet.value = true
 }
 
@@ -555,8 +566,22 @@ function openDetail(advice) {
 function sendFeedback(advice, type) {
   const newFeedback = advice.feedback === type ? 0 : type
   advice.feedback = newFeedback
-  post('/api/merchant/advice/feedback', { id: advice.id, feedback: newFeedback }, { showLoad: false }).catch(() => {})
+  advice.feedbackNote = feedbackNote.value
+  post('/api/merchant/advice/feedback',
+    { id: advice.id, feedback: newFeedback, feedbackNote: feedbackNote.value },
+    { showLoad: false }).catch(() => {})
   uni.showToast({ title: newFeedback === 0 ? '已撤销反馈' : '感谢反馈', icon: 'success' })
+}
+
+// 仅保存备注（不改变有用/无用状态）
+function saveFeedbackNote() {
+  const advice = currentAdvice.value
+  if (!advice) return
+  advice.feedbackNote = feedbackNote.value
+  post('/api/merchant/advice/feedback',
+    { id: advice.id, feedback: advice.feedback || 0, feedbackNote: feedbackNote.value },
+    { showLoad: false }).catch(() => {})
+  uni.showToast({ title: '备注已保存', icon: 'success' })
 }
 
 async function onFabClick() {
@@ -937,6 +962,35 @@ function generateAdvice() {
       box-sizing: border-box;
       padding: 0;
       &.done { opacity: 0.5; }
+    }
+  }
+
+  .fb-note-row {
+    margin-top: 20rpx;
+
+    .fb-note-input {
+      width: 100%;
+      min-height: 120rpx;
+      background: #f4f5f9;
+      border: 1rpx solid #e0e0e0;
+      border-radius: 16rpx;
+      padding: 16rpx 20rpx;
+      font-size: 26rpx;
+      color: #333;
+      box-sizing: border-box;
+    }
+
+    .fb-note-save {
+      margin-top: 14rpx;
+      height: 72rpx;
+      line-height: 72rpx;
+      border-radius: 18rpx;
+      background: #1f4788;
+      color: #fff;
+      font-size: 26rpx;
+      padding: 0;
+
+      &:active { opacity: 0.85; }
     }
   }
 }
